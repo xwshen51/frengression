@@ -15,7 +15,7 @@ logit <- function(p){
 # strength_instr, strength_conf stand for coefficients in propensity score model for I and X, respectively.
 # strength outcome stand for coefficients in potential outcome model for X and O.
 # Z = (I,X,O,S); Z \overset{i.i.d}{\sim} N(0,1) 
-# A \sim bernoulli(pi(Z)), pi(Z) = \sum_i^{nI} strength_instr_i * I_i + \sum_i^{nX} strength_instr_i * X_i 
+# A \sim bernoulli(pi(Z)), pi(Z) = logit( \sum_i^{nI} strength_instr_i * I_i + \sum_i^{nX} strength_conf_i * X_i )
 # Y|do(A) \sim N(ate*A,1)
 # copula: gaussian copula, with coefficient to be strength_outcome
 # beta_cov: constant shift. set = 0 for simplification.
