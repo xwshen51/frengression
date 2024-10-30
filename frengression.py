@@ -11,11 +11,13 @@ class Frengression(torch.nn.Module):
         self.x_dim = x_dim
         self.y_dim = y_dim
         self.z_dim = z_dim
+        self.num_layer = num_layer
+        self.hidden_dim = hidden_dim
+        self.noise_dim = noise_dim
         self.device = device
-        self.model_xz = StoNet(0, x_dim + z_dim, num_layer, hidden_dim, x_dim + z_dim, add_bn=False, noise_all_layer=False).to(device)
+        self.model_xz = StoNet(0, x_dim + z_dim, num_layer, hidden_dim, max(x_dim + z_dim, noise_dim), add_bn=False, noise_all_layer=False).to(device)
         self.model_y = StoNet(x_dim + y_dim, y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False).to(device)
         self.model_eta = StoNet(x_dim + z_dim, y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False).to(device)
-        
         
     def train_xz(self, x, z, num_iters=100, lr=1e-3, print_every_iter=10):
         self.model_xz.train()
@@ -54,8 +56,7 @@ class Frengression(torch.nn.Module):
             loss.backward()
             self.optimizer_y.step()
             if (i == 0) or ((i + 1) % print_every_iter == 0):
-                print(f'Epoch {i + 1}: loss {loss.item():.4f}, loss_y {loss_y.item():.4f}, {loss1_y.item():.4f}, {loss2_y.item():.4f},\
-                      loss_eta {loss_eta.item():.4f}, {loss1_eta.item():.4f}, {loss2_eta.item():.4f}')
+                print(f'Epoch {i + 1}: loss {loss.item():.4f},\tloss_y {loss_y.item():.4f}, {loss1_y.item():.4f}, {loss2_y.item():.4f},\tloss_eta {loss_eta.item():.4f}, {loss1_eta.item():.4f}, {loss2_eta.item():.4f}')
     
     @torch.no_grad()
     def predict_causal(self, x, target="mean", sample_size=100):
@@ -80,3 +81,7 @@ class Frengression(torch.nn.Module):
             return causal_margin(x, eta)
         self.model_y = causal_margin1
     
+    def reset_y_models(self):
+        self.model_y = StoNet(self.x_dim + self.y_dim, self.y_dim, self.num_layer, self.hidden_dim, self.noise_dim, add_bn=False, noise_all_layer=False).to(self.device)
+        self.model_eta = StoNet(self.x_dim + self.z_dim, self.y_dim, self.num_layer, self.hidden_dim, self.noise_dim, add_bn=False, noise_all_layer=False).to(self.device)
+
