@@ -12,7 +12,7 @@ class Frengression(torch.nn.Module):
         self.y_dim = y_dim
         self.z_dim = z_dim
         self.device = device
-        self.model_xz = StoNet(0, x_dim + z_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False).to(device)
+        self.model_xz = StoNet(0, x_dim + z_dim, num_layer, hidden_dim, x_dim + z_dim, add_bn=False, noise_all_layer=False).to(device)
         self.model_y = StoNet(x_dim + y_dim, y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False).to(device)
         self.model_eta = StoNet(x_dim + z_dim, y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False).to(device)
         
@@ -30,7 +30,7 @@ class Frengression(torch.nn.Module):
             loss.backward()
             self.optimizer_xz.step()
             if (i == 0) or ((i + 1) % print_every_iter == 0):
-                print(f'Epoch {i}: loss {loss.item():.4f}, loss1 {loss1.item():.4f}, loss2 {loss2.item():.4f}')
+                print(f'Epoch {i + 1}: loss {loss.item():.4f}, loss1 {loss1.item():.4f}, loss2 {loss2.item():.4f}')
     
     def train_y(self, x, z, y, num_iters=100, lr=1e-3, print_every_iter=10):
         self.model_y.train()
@@ -54,13 +54,14 @@ class Frengression(torch.nn.Module):
             loss.backward()
             self.optimizer_y.step()
             if (i == 0) or ((i + 1) % print_every_iter == 0):
-                print(f'Epoch {i}: loss {loss.item():.4f}, loss_y {loss_y.item():.4f}, {loss1_y.item():.4f}, {loss2_y.item():.4f},
+                print(f'Epoch {i + 1}: loss {loss.item():.4f}, loss_y {loss_y.item():.4f}, {loss1_y.item():.4f}, {loss2_y.item():.4f},\
                       loss_eta {loss_eta.item():.4f}, {loss1_eta.item():.4f}, {loss2_eta.item():.4f}')
     
     @torch.no_grad()
     def predict_causal(self, x, target="mean", sample_size=100):
         self.eval()
-        return self.y_model.predict(x, target, sample_size)
+        x = x.to(self.device)
+        return self.model_y.predict(x, target, sample_size)
         
     @torch.no_grad()
     def sample_joint(self, sample_size=100):
