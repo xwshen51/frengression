@@ -19,11 +19,16 @@ logit <- function(p){
 # Y|do(A) \sim N(ate*A,1)
 # copula: gaussian copula, with coefficient to be strength_outcome
 # beta_cov: constant shift. set = 0 for simplification.
-data.causl <- function(n=10000, nI = 3, nX= 1, nO = 1, nS = 1, ate = 2, beta_cov = 0, strength_instr = 3, strength_conf = 1, strength_outcome = 0.2){
+data.causl <- function(n=10000, nI = 3, nX= 1, nO = 1, nS = 1, ate = 2, beta_cov = 0, strength_instr = 3, strength_conf = 1, strength_outcome = 0.2, binary_intervention = TRUE){
 
   forms <- list(list(), A ~ 1, Y ~ A, ~ 1)
   # family: 5: bernoulli for treatment. 1: gaussian for outcome and covariates.
-  fam <- list(rep(1,nI+nX+nO+nS), 5, 1, 1)
+  if(binary_intervention){
+    fam <- list(rep(1,nI+nX+nO+nS), 5, 1, 1)
+  }else{
+    fam <-list(rep(1,nI+nX+nO+nS), 1, 1, 1)
+  }
+  
   pars = list()
 
   # specify the formula for each covariates
@@ -67,12 +72,20 @@ data.causl <- function(n=10000, nI = 3, nX= 1, nO = 1, nS = 1, ate = 2, beta_cov
 
   # each variable should be specified in pars
   pars$A$beta <- c(0, rep(strength_instr,nI), rep(strength_conf,nX))
+  if(binary_intervention==FALSE){
+    pars$A$phi <- 1
+  }
   pars$Y$beta <- c(0, ate)
   pars$Y$phi <- 1
 
   df = rfrugalParam(n=n, formulas=forms, pars=pars, family=fam)
-  df['propen'] = plogis( rowSums(c(rep(strength_instr,nI), rep(strength_conf,nX)) * df[,c(1:(nI+nX))]))
   p = nX + nI + nO + nS
-  colnames(df) = c(paste("X", c(1 : p), sep=""), 'A', 'y', 'propen')
+  if(binary_intervention){
+    df['propen'] = plogis( rowSums(c(rep(strength_instr,nI), rep(strength_conf,nX)) * df[,c(1:(nI+nX))]))
+    colnames(df) = c(paste("X", c(1 : p), sep=""), 'A', 'y', 'propen')
+  }else{
+    colnames(df) = c(paste("X", c(1 : p), sep=""), 'A', 'y')
+  }
+
 return(df)
 } 
