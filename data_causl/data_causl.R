@@ -19,73 +19,112 @@ logit <- function(p){
 # Y|do(A) \sim N(ate*A,1)
 # copula: gaussian copula, with coefficient to be strength_outcome
 # beta_cov: constant shift. set = 0 for simplification.
-data.causl <- function(n=10000, nI = 3, nX= 1, nO = 1, nS = 1, ate = 2, beta_cov = 0, strength_instr = 3, strength_conf = 1, strength_outcome = 0.2, binary_intervention = TRUE){
-
+data.causl <- function(n=10000, nI=3, nX=1, nO=1, nS=1, ate=2, beta_cov=0, strength_instr=3, strength_conf=1, strength_outcome=0.2, binary_intervention=TRUE){
+  
   forms <- list(list(), A ~ 1, Y ~ A, ~ 1)
-  # family: 5: bernoulli for treatment. 1: gaussian for outcome and covariates.
+  
   if(binary_intervention){
-    fam <- list(rep(1,nI+nX+nO+nS), 5, 1, 1)
-  }else{
-    fam <-list(rep(1,nI+nX+nO+nS), 1, 1, 1)
+    fam <- list(rep(1, nI + nX + nO + nS), 5, 1, 1)
+  } else {
+    fam <- list(rep(1, nI + nX + nO + nS), 1, 1, 1)
   }
   
-  pars = list()
-
-  # specify the formula for each covariates
-  ## for I
-  for (i in seq_len(nI)) {
-    forms[[1]] <- c(forms[[1]], as.formula(paste0("I", i, " ~ 1")))
-    pars[paste0("I", i)]= list(list(beta = beta_cov, phi = 1))
+  pars <- list()
+  
+  # Specify the formula and parameters for each covariate type
+  ## Instrumental variables (I)
+  if (nI > 0) {
+    for (i in seq_len(nI)) {
+      forms[[1]] <- c(forms[[1]], as.formula(paste0("I", i, " ~ 1")))
+      pars[paste0("I", i)] <- list(list(beta = beta_cov, phi = 1))
+    }
   }
-  ## and for X,O,S
-  for (i in seq_len(nX)) {
-    forms[[1]] <- c(forms[[1]], as.formula(paste0("X", i, " ~ 1")))
-    pars[paste0("X", i)]= list(list(beta = beta_cov, phi = 1))
+  
+  ## Confounders (X)
+  if (nX > 0) {
+    for (i in seq_len(nX)) {
+      forms[[1]] <- c(forms[[1]], as.formula(paste0("X", i, " ~ 1")))
+      pars[paste0("X", i)] <- list(list(beta = beta_cov, phi = 1))
+    }
+  }
+  
+  ## Outcome variables (O)
+  if (nO > 0) {
+    for (i in seq_len(nO)) {
+      forms[[1]] <- c(forms[[1]], as.formula(paste0("O", i, " ~ 1")))
+      pars[paste0("O", i)] <- list(list(beta = beta_cov, phi = 1))
+    }
+  }
+  
+  ## Spurious variables (S)
+  if (nS > 0) {
+    for (i in seq_len(nS)) {
+      forms[[1]] <- c(forms[[1]], as.formula(paste0("S", i, " ~ 1")))
+      pars[paste0("S", i)] <- list(list(beta = beta_cov, phi = 1))
+    }
+  }
+  
+  # Specify the formula for A given covariates
+  ## Add I to the propensity score formula
+  if (nI > 0) {
+    for (i in seq_len(nI)) {
+      forms[[2]] <- update.formula(forms[[2]], paste0("A ~ . + I", i))
+    }
+  }
+  
+  ## Add X to the propensity score formula
+  if (nX > 0) {
+    for (i in seq_len(nX)) {
+      forms[[2]] <- update.formula(forms[[2]], paste0("A ~ . + X", i))
+    }
+  }
+  
+  # Parameters for copula
+  parY <- list()
+  parY_names <- c()
+
+  if (nX > 0) {
+    parY <- c(parY, rep(list(list(beta = strength_outcome)), nX))
+    parY_names <- c(parY_names, paste0("X", seq_len(nX)))
+  }
+  if (nO > 0) {
+    parY <- c(parY, rep(list(list(beta = strength_outcome)), nO))
+    parY_names <- c(parY_names, paste0("O", seq_len(nO)))
+  }
+  if (nI > 0) {
+    parY <- c(parY, rep(list(list(beta = 0)), nI))
+    parY_names <- c(parY_names, paste0("I", seq_len(nI)))
+  }
+  if (nS > 0) {
+    parY <- c(parY, rep(list(list(beta = 0)), nS))
+    parY_names <- c(parY_names, paste0("S", seq_len(nS)))
   }
 
+  names(parY) <- parY_names
+  pars$cop <- list(Y = parY)
 
-  for (i in seq_len(nO)) {
-    forms[[1]] <- c(forms[[1]], as.formula(paste0("O", i, " ~ 1")))
-    pars[paste0("O", i)]= list(list(beta = beta_cov, phi = 1))
-  }
-
-  for (i in seq_len(nS)) {
-    forms[[1]] <- c(forms[[1]], as.formula(paste0("S", i, " ~ 1")))
-    pars[paste0("S", i)]= list(list(beta = beta_cov, phi = 1))
-  }
-
-  # specify the formula for A given covariates
-  ## for I
-  for (i in seq_len(nI)) {
-    forms[[2]] <- update.formula(forms[[2]], paste0("A", " ~ . + I",i))
-  }
-  ## and for X
-  for (i in seq_len(nX)) {
-    forms[[2]] <- update.formula(forms[[2]], paste0("A", " ~ . + X",i))
-  }
-
-
-  # parameter for copula
-  parY <- c(rep(list(list(beta=strength_outcome)), nX+nO), rep(list(list(beta=0)), nI+nS))
-  names(parY) <- c(paste0("X", seq_len(nX)), paste0("O", seq_len(nO)), paste0("I", seq_len(nI)), paste0("S", seq_len(nS)))
-  pars$cop = list(Y=parY)
-
-  # each variable should be specified in pars
-  pars$A$beta <- c(0, rep(strength_instr,nI), rep(strength_conf,nX))
-  if(binary_intervention==FALSE){
+  
+  # Set parameters for A
+  pars$A$beta <- c(0, rep(strength_instr, nI), rep(strength_conf, nX))
+  if (!binary_intervention) {
     pars$A$phi <- 1
   }
+  
+  # Set parameters for Y
   pars$Y$beta <- c(0, ate)
   pars$Y$phi <- 1
-
-  df = rfrugalParam(n=n, formulas=forms, pars=pars, family=fam)
-  p = nX + nI + nO + nS
-  if(binary_intervention){
-    df['propen'] = plogis( rowSums(c(rep(strength_instr,nI), rep(strength_conf,nX)) * df[,c(1:(nI+nX))]))
-    colnames(df) = c(paste("X", c(1 : p), sep=""), 'A', 'y', 'propen')
-  }else{
-    colnames(df) = c(paste("X", c(1 : p), sep=""), 'A', 'y')
+  
+  # Generate data
+  df <- rfrugalParam(n = n, formulas = forms, pars = pars, family = fam)
+  p <- nX + nI + nO + nS
+  
+  # Propensity score
+  if (binary_intervention) {
+    df['propen'] <- plogis(rowSums(c(rep(strength_instr, nI), rep(strength_conf, nX)) * df[, c(1:(nI + nX))]))
+    colnames(df) <- c(paste("X", 1:p, sep = ""), 'A', 'y', 'propen')
+  } else {
+    colnames(df) <- c(paste("X", 1:p, sep = ""), 'A', 'y')
   }
-
-return(df)
-} 
+  
+  return(df)
+}
