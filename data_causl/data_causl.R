@@ -120,7 +120,13 @@ data.causl <- function(n=10000, nI=3, nX=1, nO=1, nS=1, ate=2, beta_cov=0, stren
   
   # Propensity score
   if (binary_intervention) {
-    df['propen'] <- plogis(rowSums(c(rep(strength_instr, nI), rep(strength_conf, nX)) * df[, c(1:(nI + nX))]))
+    if (nI + nX == 1) {
+        # Only one column, so use it directly
+        df['propen'] <- plogis(c(rep(strength_instr, nI), rep(strength_conf, nX)) * df[, 1])
+    } else {
+        # Multiple columns, so use rowSums
+        df['propen'] <- plogis(rowSums(c(rep(strength_instr, nI), rep(strength_conf, nX)) * df[, c(1:(nI + nX))]))
+    }
     colnames(df) <- c(paste("X", 1:p, sep = ""), 'A', 'y', 'propen')
   } else {
     colnames(df) <- c(paste("X", 1:p, sep = ""), 'A', 'y')
