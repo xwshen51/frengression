@@ -90,6 +90,15 @@ class Frengression(torch.nn.Module):
         y = self.model_y(torch.cat([x, eta], dim=1))
         return x, y, z
 
+    @torch.no_grad()
+    def sample_causal_margin(self, x, sample_size=100):
+        self.eval()
+        if self.x_binary:
+            x = (x < 0).float()
+        y = self.model_y.sample(x, sample_size = sample_size)
+        return y
+    
+
     def specify_causal(self, causal_margin):
         def causal_margin1(x_eta):
             x = x_eta[:, :self.x_dim]
@@ -100,4 +109,3 @@ class Frengression(torch.nn.Module):
     def reset_y_models(self):
         self.model_y = StoNet(self.x_dim + self.y_dim, self.y_dim, self.num_layer, self.hidden_dim, self.noise_dim, add_bn=False, noise_all_layer=False).to(self.device)
         self.model_eta = StoNet(self.x_dim + self.z_dim, self.y_dim, self.num_layer, self.hidden_dim, self.noise_dim, add_bn=False, noise_all_layer=False).to(self.device)
-
