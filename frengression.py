@@ -93,8 +93,6 @@ class Frengression(torch.nn.Module):
     @torch.no_grad()
     def sample_causal_margin(self, x, sample_size=100):
         self.eval()
-        if self.x_binary:
-            x = (x < 0).float()
         y = self.model_y.sample(x, sample_size = sample_size)
         return y
     
