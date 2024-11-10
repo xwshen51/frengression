@@ -2,10 +2,12 @@ import torch
 from engression.models import StoNet
 from engression.loss_func import energy_loss_two_sample
 
+sigmoid = torch.nn.Sigmoid()
 
 class Frengression(torch.nn.Module):
     def __init__(self, x_dim, y_dim, z_dim,
                  num_layer=3, hidden_dim=100, noise_dim=10,
+                 x_binary=False, z_binary=False, y_binary=False,
                  device=torch.device('cuda')):
         super().__init__()
         self.x_dim = x_dim
@@ -14,9 +16,13 @@ class Frengression(torch.nn.Module):
         self.num_layer = num_layer
         self.hidden_dim = hidden_dim
         self.noise_dim = noise_dim
+        self.x_binary = x_binary
+        self.z_binary = z_binary
+        self.y_binary = y_binary
         self.device = device
         self.model_xz = StoNet(0, x_dim + z_dim, num_layer, hidden_dim, max(x_dim + z_dim, noise_dim), add_bn=False, noise_all_layer=False).to(device)
-        self.model_y = StoNet(x_dim + y_dim, y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False).to(device)
+        out_act = 'sigmoid' if y_binary else None
+        self.model_y = StoNet(x_dim + y_dim, y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act).to(device)
         self.model_eta = StoNet(x_dim + z_dim, y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False).to(device)
         
     def train_xz(self, x, z, num_iters=100, lr=1e-3, print_every_iter=10):
@@ -28,6 +34,12 @@ class Frengression(torch.nn.Module):
             self.optimizer_xz.zero_grad()
             sample1 = self.model_xz(x.size(0))
             sample2 = self.model_xz(x.size(0))
+            if self.x_binary:
+                sample1[:, :self.x_dim] = sigmoid(sample1[:, :self.x_dim])
+                sample2[:, :self.x_dim] = sigmoid(sample2[:, :self.x_dim])
+            if self.z_binary:
+                sample1[:, self.x_dim:] = sigmoid(sample1[:, :self.x_dim])
+                sample2[:, self.x_dim:] = sigmoid(sample2[:, :self.x_dim])
             loss, loss1, loss2 = energy_loss_two_sample(xz, sample1, sample2)
             loss.backward()
             self.optimizer_xz.step()
@@ -71,8 +83,21 @@ class Frengression(torch.nn.Module):
         eta = self.model_eta(xz)
         x = xz[:, :self.x_dim]
         z = xz[:, self.x_dim:]
+        if self.x_binary:
+            x = (x < 0).float()
+        if self.z_binary:
+            z = (z < 0).float()
         y = self.model_y(torch.cat([x, eta], dim=1))
         return x, y, z
+
+    @torch.no_grad()
+    def sample_causal_margin(self, x, sample_size=100):
+        self.eval()
+        if self.x_binary:
+            x = (x < 0).float()
+        y = self.model_y.sample(x, sample_size = sample_size)
+        return y
+    
 
     def specify_causal(self, causal_margin):
         def causal_margin1(x_eta):
@@ -84,4 +109,3 @@ class Frengression(torch.nn.Module):
     def reset_y_models(self):
         self.model_y = StoNet(self.x_dim + self.y_dim, self.y_dim, self.num_layer, self.hidden_dim, self.noise_dim, add_bn=False, noise_all_layer=False).to(self.device)
         self.model_eta = StoNet(self.x_dim + self.z_dim, self.y_dim, self.num_layer, self.hidden_dim, self.noise_dim, add_bn=False, noise_all_layer=False).to(self.device)
-
