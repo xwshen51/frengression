@@ -38,8 +38,8 @@ class Frengression(torch.nn.Module):
                 sample1[:, :self.x_dim] = sigmoid(sample1[:, :self.x_dim])
                 sample2[:, :self.x_dim] = sigmoid(sample2[:, :self.x_dim])
             if self.z_binary:
-                sample1[:, self.x_dim:] = sigmoid(sample1[:, :self.x_dim])
-                sample2[:, self.x_dim:] = sigmoid(sample2[:, :self.x_dim])
+                sample1[:, self.x_dim:] = sigmoid(sample1[:, self.x_dim:])
+                sample2[:, self.x_dim:] = sigmoid(sample2[:, self.x_dim:])
             loss, loss1, loss2 = energy_loss_two_sample(xz, sample1, sample2)
             loss.backward()
             self.optimizer_xz.step()
