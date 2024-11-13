@@ -38,8 +38,8 @@ class Frengression(torch.nn.Module):
                 sample1[:, :self.x_dim] = sigmoid(sample1[:, :self.x_dim])
                 sample2[:, :self.x_dim] = sigmoid(sample2[:, :self.x_dim])
             if self.z_binary:
-                sample1[:, self.x_dim:] = sigmoid(sample1[:, :self.x_dim])
-                sample2[:, self.x_dim:] = sigmoid(sample2[:, :self.x_dim])
+                sample1[:, self.x_dim:] = sigmoid(sample1[:, self.x_dim:])
+                sample2[:, self.x_dim:] = sigmoid(sample2[:, self.x_dim:])
             loss, loss1, loss2 = energy_loss_two_sample(xz, sample1, sample2)
             loss.backward()
             self.optimizer_xz.step()
@@ -93,8 +93,6 @@ class Frengression(torch.nn.Module):
     @torch.no_grad()
     def sample_causal_margin(self, x, sample_size=100):
         self.eval()
-        if self.x_binary:
-            x = (x < 0).float()
         y = self.model_y.sample(x, sample_size = sample_size)
         return y
     
