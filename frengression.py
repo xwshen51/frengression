@@ -1,7 +1,6 @@
 import torch
 from engression.models import StoNet
 from engression.loss_func import energy_loss_two_sample
-
 sigmoid = torch.nn.Sigmoid()
 
 class Frengression(torch.nn.Module):
@@ -84,9 +83,9 @@ class Frengression(torch.nn.Module):
         x = xz[:, :self.x_dim]
         z = xz[:, self.x_dim:]
         if self.x_binary:
-            x = (x < 0).float()
+            x = (x > 0).float()
         if self.z_binary:
-            z = (z < 0).float()
+            z = (z > 0).float()
         y = self.model_y(torch.cat([x, eta], dim=1))
         return x, y, z
 
