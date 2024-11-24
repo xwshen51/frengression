@@ -120,100 +120,100 @@ class ACIC2016(object):
 
 
 
-class IHDP(object):
-    def __init__(self, exp_num, device='cpu', dataset='train', path_data="../data", tensor=True, normalise_y=True, split_original=False, rescale_cates=True, train_size=0.6, val_size=0.2, scale=True):
-        self.path_data = path_data
+# class IHDP(object):
+#     def __init__(self, exp_num, device='cpu', dataset='train', path_data="../data", tensor=True, normalise_y=True, split_original=False, rescale_cates=True, train_size=0.6, val_size=0.2, scale=True):
+#         self.path_data = path_data
 
-        attrs = {}
-        data = np.loadtxt(os.path.join(self.path_data,'IHDP/csv/ihdp_npci_' + str(exp_num) + '.csv'), delimiter=',')
-        t, y, y_cf = data[:, 0][:, np.newaxis], data[:, 1][:, np.newaxis], data[:, 2][:, np.newaxis]
-        mu_0, mu_1, x = data[:, 3][:, np.newaxis], data[:, 4][:, np.newaxis], data[:, 5:]
-        x[:, 13] -= 1 # binary variable with values 1 and 2
-        attrs['t'] = t
-        attrs['y'] = y
-        attrs['y_cf'] = y_cf
-        attrs['mu0'] = mu_0
-        attrs['mu1'] = mu_1
-        attrs['cate_true'] = mu_1 - mu_0
-        attrs['x'] = x
+#         attrs = {}
+#         data = np.loadtxt(os.path.join(self.path_data,'IHDP/csv/ihdp_npci_' + str(exp_num) + '.csv'), delimiter=',')
+#         t, y, y_cf = data[:, 0][:, np.newaxis], data[:, 1][:, np.newaxis], data[:, 2][:, np.newaxis]
+#         mu_0, mu_1, x = data[:, 3][:, np.newaxis], data[:, 4][:, np.newaxis], data[:, 5:]
+#         x[:, 13] -= 1 # binary variable with values 1 and 2
+#         attrs['t'] = t
+#         attrs['y'] = y
+#         attrs['y_cf'] = y_cf
+#         attrs['mu0'] = mu_0
+#         attrs['mu1'] = mu_1
+#         attrs['cate_true'] = mu_1 - mu_0
+#         attrs['x'] = x
 
-        if split_original: # unused in experiments - divide data as in code for CEVAE : https://github.com/AMLab-Amsterdam/CEVAE/blob/master/datasets.py
-            idxtrain, ite = train_test_split(np.arange(x.shape[0]), test_size=0.1, random_state=1)
-            itr, iva = train_test_split(idxtrain, test_size=0.3, random_state=1)
-        else:
-            n_samples = x.shape[0]
-            rng = np.random.default_rng(seed=0)
-            original_indices = rng.permutation(n_samples)
-            n_train = int(train_size * n_samples)
-            n_val = int(val_size * n_samples)
-            itr = original_indices[:n_train] # train set
-            iva = original_indices[n_train:n_train + n_val] # val set
-            idxtrain = original_indices[:n_train + n_val] # train + val set
-            ite = original_indices[n_train + n_val:]  # test set
+#         if split_original: # unused in experiments - divide data as in code for CEVAE : https://github.com/AMLab-Amsterdam/CEVAE/blob/master/datasets.py
+#             idxtrain, ite = train_test_split(np.arange(x.shape[0]), test_size=0.1, random_state=1)
+#             itr, iva = train_test_split(idxtrain, test_size=0.3, random_state=1)
+#         else:
+#             n_samples = x.shape[0]
+#             rng = np.random.default_rng(seed=0)
+#             original_indices = rng.permutation(n_samples)
+#             n_train = int(train_size * n_samples)
+#             n_val = int(val_size * n_samples)
+#             itr = original_indices[:n_train] # train set
+#             iva = original_indices[n_train:n_train + n_val] # val set
+#             idxtrain = original_indices[:n_train + n_val] # train + val set
+#             ite = original_indices[n_train + n_val:]  # test set
 
-        if rescale_cates: # rescale CATEs as in Curth et al. 2021 - see paper for ref
-            sd_cate = np.sqrt(np.var(attrs['cate_true'][idxtrain]))
-            if sd_cate > 1:
-                error = y - t*mu_1 - (1-t)*mu_0
-                mu_0 = mu_0 / sd_cate
-                mu_1 = mu_1 / sd_cate
-                y  = t*mu_1 + (1-t)*mu_0 + error
-                attrs['y'] = y
-                attrs['mu0'] = mu_0
-                attrs['mu1'] = mu_1
-                attrs['cate_true'] = mu_1 - mu_0
+#         if rescale_cates: # rescale CATEs as in Curth et al. 2021 - see paper for ref
+#             sd_cate = np.sqrt(np.var(attrs['cate_true'][idxtrain]))
+#             if sd_cate > 1:
+#                 error = y - t*mu_1 - (1-t)*mu_0
+#                 mu_0 = mu_0 / sd_cate
+#                 mu_1 = mu_1 / sd_cate
+#                 y  = t*mu_1 + (1-t)*mu_0 + error
+#                 attrs['y'] = y
+#                 attrs['mu0'] = mu_0
+#                 attrs['mu1'] = mu_1
+#                 attrs['cate_true'] = mu_1 - mu_0
 
-        ytr = y[itr]
-        ym, ys = np.mean(ytr), np.std(ytr)
-        self.ym = ym
-        self.ys = ys
-        if dataset == 'train':
-            original_indices = itr
-        elif dataset == 'val':
-            original_indices = iva
-        elif dataset == "train_val":
-            original_indices = idxtrain
-        else:
-            original_indices = ite
-        self.original_indices = original_indices
+#         ytr = y[itr]
+#         ym, ys = np.mean(ytr), np.std(ytr)
+#         self.ym = ym
+#         self.ys = ys
+#         if dataset == 'train':
+#             original_indices = itr
+#         elif dataset == 'val':
+#             original_indices = iva
+#         elif dataset == "train_val":
+#             original_indices = idxtrain
+#         else:
+#             original_indices = ite
+#         self.original_indices = original_indices
 
-        # Find binary covariates
-        self.binary = []
-        for ind in range(attrs['x'].shape[1]):
-            self.binary.append(len(np.unique(attrs['x'][:, ind])) == 2)
-        self.binary = np.array(self.binary)
+#         # Find binary covariates
+#         self.binary = []
+#         for ind in range(attrs['x'].shape[1]):
+#             self.binary.append(len(np.unique(attrs['x'][:, ind])) == 2)
+#         self.binary = np.array(self.binary)
 
-        # Normalise - continuous variables only
-        self.scale = scale
-        self.xm = np.zeros(self.binary.shape)
-        self.xs = np.ones(self.binary.shape)
-        if self.scale:
-            self.xm[~self.binary] = np.mean(attrs['x'][idxtrain][:, ~self.binary], axis=0)
-            self.xs[~self.binary] = np.std(attrs['x'][idxtrain][:, ~self.binary], axis=0)
-        attrs['x'] -= self.xm
-        attrs['x'] /= self.xs
+#         # Normalise - continuous variables only
+#         self.scale = scale
+#         self.xm = np.zeros(self.binary.shape)
+#         self.xs = np.ones(self.binary.shape)
+#         if self.scale:
+#             self.xm[~self.binary] = np.mean(attrs['x'][idxtrain][:, ~self.binary], axis=0)
+#             self.xs[~self.binary] = np.std(attrs['x'][idxtrain][:, ~self.binary], axis=0)
+#         attrs['x'] -= self.xm
+#         attrs['x'] /= self.xs
 
-        # Subsample data and convert to torch.Tensor with the right device
-        for key, value in attrs.items():
-            value = value[original_indices]
-            if tensor:
-                value = torch.Tensor(value).to(device)
-            setattr(self, key, value)
+#         # Subsample data and convert to torch.Tensor with the right device
+#         for key, value in attrs.items():
+#             value = value[original_indices]
+#             if tensor:
+#                 value = torch.Tensor(value).to(device)
+#             setattr(self, key, value)
 
-        if normalise_y:
-            self.y = (self.y - ym) / ys
+#         if normalise_y:
+#             self.y = (self.y - ym) / ys
 
 
-    def __getitem__(self, index, attrs=None):
-        if attrs is None:
-            attrs = ['x', 'y', 't', 'mu0', 'mu1', 'cate_true']
-        res = []
-        for attr in attrs:
-            res.append(getattr(self, attr)[index])
-        return (*res,)
+#     def __getitem__(self, index, attrs=None):
+#         if attrs is None:
+#             attrs = ['x', 'y', 't', 'mu0', 'mu1', 'cate_true']
+#         res = []
+#         for attr in attrs:
+#             res.append(getattr(self, attr)[index])
+#         return (*res,)
 
-    def __len__(self):
-        return len(self.original_indices)
+#     def __len__(self):
+#         return len(self.original_indices)
 
 
 class News():

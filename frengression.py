@@ -20,7 +20,7 @@ class Frengression(torch.nn.Module):
         self.noise_dim = noise_dim
         self.x_binary = x_binary
         # self.z_binary = z_binary
-        self.z_binary_dims = z_binary_dims,
+        self.z_binary_dims = z_binary_dims
         self.y_binary = y_binary
         self.device = device
         self.model_xz = StoNet(0, x_dim + z_dim, num_layer, hidden_dim, max(x_dim + z_dim, noise_dim), add_bn=False, noise_all_layer=False).to(device)
@@ -40,7 +40,7 @@ class Frengression(torch.nn.Module):
             if self.x_binary:
                 sample1[:, :self.x_dim] = sigmoid(sample1[:, :self.x_dim])
                 sample2[:, :self.x_dim] = sigmoid(sample2[:, :self.x_dim])
-            if self.z_binary_dims>0:
+            if self.z_binary_dims > 0:
                 sample1[:, self.x_dim:(self.x_dim+self.z_binary_dims)] = sigmoid(sample1[:, self.x_dim:(self.x_dim+self.z_binary_dims)])
                 sample2[:, self.x_dim:(self.x_dim+self.z_binary_dims)] = sigmoid(sample2[:, self.x_dim:(self.x_dim+self.z_binary_dims)])
             loss, loss1, loss2 = energy_loss_two_sample(xz, sample1, sample2)
