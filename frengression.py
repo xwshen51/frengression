@@ -6,7 +6,10 @@ sigmoid = torch.nn.Sigmoid()
 class Frengression(torch.nn.Module):
     def __init__(self, x_dim, y_dim, z_dim,
                  num_layer=3, hidden_dim=100, noise_dim=10,
-                 x_binary=False, z_binary=False, y_binary=False,
+                 x_binary=False, 
+                 #z_binary=False, 
+                 z_binary_dims = 0, # number of binary confounders.
+                 y_binary=False,
                  device=torch.device('cuda')):
         super().__init__()
         self.x_dim = x_dim
@@ -16,7 +19,8 @@ class Frengression(torch.nn.Module):
         self.hidden_dim = hidden_dim
         self.noise_dim = noise_dim
         self.x_binary = x_binary
-        self.z_binary = z_binary
+        # self.z_binary = z_binary
+        self.z_binary_dims = z_binary_dims,
         self.y_binary = y_binary
         self.device = device
         self.model_xz = StoNet(0, x_dim + z_dim, num_layer, hidden_dim, max(x_dim + z_dim, noise_dim), add_bn=False, noise_all_layer=False).to(device)
@@ -36,9 +40,9 @@ class Frengression(torch.nn.Module):
             if self.x_binary:
                 sample1[:, :self.x_dim] = sigmoid(sample1[:, :self.x_dim])
                 sample2[:, :self.x_dim] = sigmoid(sample2[:, :self.x_dim])
-            if self.z_binary:
-                sample1[:, self.x_dim:] = sigmoid(sample1[:, self.x_dim:])
-                sample2[:, self.x_dim:] = sigmoid(sample2[:, self.x_dim:])
+            if self.z_binary_dims>0:
+                sample1[:, self.x_dim:(self.x_dim+self.z_binary_dims)] = sigmoid(sample1[:, self.x_dim:(self.x_dim+self.z_binary_dims)])
+                sample2[:, self.x_dim:(self.x_dim+self.z_binary_dims)] = sigmoid(sample2[:, self.x_dim:(self.x_dim+self.z_binary_dims)])
             loss, loss1, loss2 = energy_loss_two_sample(xz, sample1, sample2)
             loss.backward()
             self.optimizer_xz.step()
@@ -83,8 +87,8 @@ class Frengression(torch.nn.Module):
         z = xz[:, self.x_dim:]
         if self.x_binary:
             x = (x > 0).float()
-        if self.z_binary:
-            z = (z > 0).float()
+        if self.z_binary_dims>0:
+            z[:, :self.z_binary_dims] = (z[:, :self.z_binary_dims] > 0).float()
         xz = torch.cat([x, z], dim=1)
         eta = self.model_eta(xz)
         y = self.model_y(torch.cat([x, eta], dim=1))
