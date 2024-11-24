@@ -79,13 +79,14 @@ class Frengression(torch.nn.Module):
     def sample_joint(self, sample_size=100):
         self.eval()
         xz = self.model_xz(sample_size)
-        eta = self.model_eta(xz)
         x = xz[:, :self.x_dim]
         z = xz[:, self.x_dim:]
         if self.x_binary:
             x = (x > 0).float()
         if self.z_binary:
             z = (z > 0).float()
+        xz = torch.cat([x, z], dim=1)
+        eta = self.model_eta(xz)
         y = self.model_y(torch.cat([x, eta], dim=1))
         return x, y, z
 
@@ -95,7 +96,6 @@ class Frengression(torch.nn.Module):
         y = self.model_y.sample(x, sample_size = sample_size)
         return y
     
-
     def specify_causal(self, causal_margin):
         def causal_margin1(x_eta):
             x = x_eta[:, :self.x_dim]
