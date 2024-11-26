@@ -185,3 +185,5 @@ lm_cache/
 # files regarding data
 data_causl/ihdp_npci_1-1000.test.npz
 data_causl/ihdp_npci_1-1000.train.npz
+data_causl/ihdp_npci_1-100.test.npz
+data_causl/ihdp_npci_1-100.train.npz
