@@ -455,4 +455,10 @@ def process_data(path='', trial=4):
 
     # df = pd.concat([df_train, df_test],axis=0)
     return df_train, df_test
-    
+
+
+def Sim_Hirano_Imbens_adrf(x):
+    return x + 2/(1+x)**3
+
+def Sim_Sun_adrf(x):
+    return x+0.5+np.exp(-0.5)

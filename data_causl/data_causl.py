@@ -2,12 +2,22 @@ import numpy as np
 import pandas as pd
 from scipy.special import expit
 import scipy.stats as stats
+
 import rpy2.robjects as robjects
 from rpy2.robjects import pandas2ri
 from rpy2.robjects.conversion import localconverter
 import io
 import contextlib
 import warnings
+
+import math
+import os
+import sys
+
+from sklearn.preprocessing import MinMaxScaler,MaxAbsScaler,StandardScaler
+from sklearn.model_selection import train_test_split
+from scipy.sparse import diags
+
 warnings.filterwarnings("ignore", message="R is not initialized by the main thread")
 
 
@@ -28,3 +38,9 @@ def generate_data_causl(n=10000, nI = 3, nX= 1, nO = 1, nS = 1, ate = 2, beta_co
     with localconverter(robjects.default_converter + pandas2ri.converter):
         df = robjects.conversion.rpy2py(r_dataframe)
     return df
+
+def rmse(hat_mu, mu):
+    return np.sqrt(np.mean((hat_mu-mu)**2))
+
+def mape(hat_mu, mu):
+    return np.mean(np.abs((hat_mu-mu)/mu))

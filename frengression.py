@@ -110,3 +110,4 @@ class Frengression(torch.nn.Module):
     def reset_y_models(self):
         self.model_y = StoNet(self.x_dim + self.y_dim, self.y_dim, self.num_layer, self.hidden_dim, self.noise_dim, add_bn=False, noise_all_layer=False).to(self.device)
         self.model_eta = StoNet(self.x_dim + self.z_dim, self.y_dim, self.num_layer, self.hidden_dim, self.noise_dim, add_bn=False, noise_all_layer=False).to(self.device)
+
