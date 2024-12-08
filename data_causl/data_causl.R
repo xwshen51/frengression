@@ -3,6 +3,8 @@ library(glmnet)
 library(zeallot) #enable %<-%
 library(mvtnorm)
 library(causl)
+library(survivl)
+library(npcausal)
 
 logit <- function(p){
   return(log(p/(1-p)))
@@ -19,6 +21,7 @@ logit <- function(p){
 # Y|do(A) \sim N(ate*A,1)
 # copula: gaussian copula, with coefficient to be strength_outcome
 # beta_cov: constant shift. set = 0 for simplification.
+
 data.causl <- function(n=10000, nI=3, nX=1, nO=1, nS=1, ate=2, beta_cov=0, strength_instr=3, strength_conf=1, strength_outcome=0.2, binary_intervention=TRUE){
   
   forms <- list(list(), A ~ 1, Y ~ A, ~ 1)
@@ -118,19 +121,52 @@ data.causl <- function(n=10000, nI=3, nX=1, nO=1, nS=1, ate=2, beta_cov=0, stren
   df <- rfrugalParam(n = n, formulas = forms, pars = pars, family = fam)
   p <- nX + nI + nO + nS
   
+  # Flatten the A column
+  df$A <- as.vector(df$A)
+
   # Propensity score
   if (binary_intervention) {
     if (nI + nX == 1) {
-        # Only one column, so use it directly
-        df['propen'] <- plogis(c(rep(strength_instr, nI), rep(strength_conf, nX)) * df[, 1])
+      df$propen <- plogis(c(rep(strength_instr, nI), rep(strength_conf, nX)) * df[, 1])
     } else {
-        # Multiple columns, so use rowSums
-        df['propen'] <- plogis(rowSums(c(rep(strength_instr, nI), rep(strength_conf, nX)) * df[, c(1:(nI + nX))]))
+      df$propen <- plogis(rowSums(c(rep(strength_instr, nI), rep(strength_conf, nX)) * df[, c(1:(nI + nX))]))
     }
     colnames(df) <- c(paste("X", 1:p, sep = ""), 'A', 'y', 'propen')
   } else {
     colnames(df) <- c(paste("X", 1:p, sep = ""), 'A', 'y')
   }
   
+  # # Remove nested attributes
+  # attributes(df) <- NULL
+  
   return(df)
+}
+
+# an example of simulating data from survivl
+# all the other components are similar to data.causl, except for
+
+data.survivl <- function(n= 1000, T=5, binary_intervention=TRUE, random_seed = 1024){
+  formulas <- list(list(),
+                 Z ~ X_l1 + C,
+                 X ~ Z_l0 + C,
+                 Y ~ X_l0 + C,
+                 cop ~ 1)
+  if(binary_intervention){
+    family <- list(5,1,5,5,1)
+    link <- list("logit", "identity", "logit", "inverse")
+  }else{
+    family <- list(5,5,5,3,1)
+    link <- list("logit", "identity", "identity", "inverse")
+  }
+  
+  pars <- list(C = list(beta=0),
+              Z = list(beta = c(-1/2,1/2,0.25), phi=0.5),
+              X = list(beta = c(0,1/2,1/10)),
+              Y = list(beta = c(0.05,0.5,0.05), phi=1),
+              cop = list(beta=0.8472979))  # gives correlation 0.4
+  set.seed(random_seed)
+  dat <- msm_samp(n=n, T=T, formulas=formulas, family=family, pars=pars, link=link)
+  df <- surv_to_long(dat)
+
+  colnames(df) <- c(paste("X", 1:p, sep = ""), 'A', 'y', 'propen')
 }

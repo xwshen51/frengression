@@ -187,3 +187,7 @@ data_causl/ihdp_npci_1-1000.test.npz
 data_causl/ihdp_npci_1-1000.train.npz
 data_causl/ihdp_npci_1-100.test.npz
 data_causl/ihdp_npci_1-100.train.npz
+data_causl/twin_pairs_Y_3years_samesex.csv
+data_causl/twin_pairs_X_3years_samesex.csv
+data_causl/twin_pairs_T_3years_samesex.csv
+decomp

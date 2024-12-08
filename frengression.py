@@ -7,7 +7,7 @@ class Frengression(torch.nn.Module):
     def __init__(self, x_dim, y_dim, z_dim,
                  num_layer=3, hidden_dim=100, noise_dim=10,
                  x_binary=False, 
-                 #z_binary=False, 
+                 #z_binary=False,
                  z_binary_dims = 0, # number of binary confounders.
                  y_binary=False,
                  device=torch.device('cuda')):
