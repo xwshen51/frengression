@@ -4,8 +4,13 @@ from scipy.special import expit
 import scipy.stats as stats
 
 import rpy2.robjects as robjects
-from rpy2.robjects import pandas2ri
+from rpy2.robjects import pandas2ri,numpy2ri
 from rpy2.robjects.conversion import localconverter
+from rpy2.robjects.packages import importr
+# Load the ranger package
+ranger = importr("ranger")
+npcausal = importr('npcausal')
+
 import io
 import contextlib
 import warnings
@@ -61,7 +66,7 @@ def dr_ate(x_tr,y_tr,z_tr, x_te, y_te, z_te, ps_model = "lr", or_model = "rf"):
     hat_sd = np.std(phi)
     return hat_ate, hat_sd
 
-def npcausal_ctseff(y,x,z,bw_seq):
+def npcausal_ctseff(y,x,z,bw_seq=np.linspace(0.2, 2, 100)):
     npcausal = importr('npcausal')
     with suppress_r_output():
         # Convert Python data to R
@@ -77,21 +82,78 @@ def npcausal_ctseff(y,x,z,bw_seq):
     results_df = pandas2ri.rpy2py(results)
     return results_df
 
-def npcausal_cdensity(y,x,z,kmax=4,gridlen=50,nsplits=5):
-    npcausal = importr('npcausal')
-    with suppress_r_output():
-        # Convert Python data to R
-        y_r = robjects.FloatVector(y) if isinstance(y, np.ndarray) else pandas2ri.py2rpy(y)
-        x_r = robjects.FloatVector(x) if isinstance(x, np.ndarray) else pandas2ri.py2rpy(x)
-        z_r = pandas2ri.py2rpy(z) if isinstance(z, pd.DataFrame) else robjects.r['as.data.frame'](z)
-        bw_seq_r = robjects.FloatVector(bw_seq)
-        
-        # Call the R ctseff function
-        cv.cdensity= robjects.r['cdensity']
-        results = cdensity(y=y_r, a=x_r, x=z_r, kmax=kmax,gridlen=gridlen, nsplits=nsplits)
-    # Convert R results back to Python (assuming results is a DataFrame-like structure)
-    results_df = pandas2ri.rpy2py(results)
-    return results_df
+# def npcausal_cdensity(y,x,z,y_grid,kmax=4,gridlen=50,nsplits=5):
+#     npcausal = importr('npcausal')
+#     with suppress_r_output():
+#         # Convert Python data to R
+#         y_r = robjects.FloatVector(y)  # Convert y to R vector
+#         x_r = robjects.FloatVector(x)  # Convert x to R vector
+#         z_r = robjects.r['as.matrix'](numpy2ri.py2rpy(z))
+#         y_grid_r = robjects.FloatVector(y_grid)
+#         # Call the R ctseff function
+#         cdensity= robjects.r['cdensity']
+#         res = cdensity(y=y_r, a=x_r, x=z_r, kmax=kmax,gridlen=gridlen, nsplits=nsplits)
+#         # Extract g1 and g0 from the results
+#         g1_function = res.rx2('g1')  # Extract g1 function from the result
+#         g0_function = res.rx2('g0')  # Extract g0 function from the result
+ 
+
+#     return g1_function, g0_function
+
+def npcausal_cdensity(y, x, z, y_grid, kmax=10, gridlen=100, nsplits=2):
+    """
+    Python wrapper for R's cdensity function with input validation and debugging.
+
+    Parameters:
+    - y: Outcome (1D array).
+    - x: Treatment (1D array).
+    - z: Covariates (2D array).
+    - y_grid: Grid values for y.
+    - kmax: Maximum number of splits.
+    - gridlen: Grid size.
+    - nsplits: Number of splits.
+
+    Returns:
+    - res: Output from cdensity.
+    """
+    # Input validation
+    cdensity = robjects.r["cdensity"]
+
+    assert np.all(np.isfinite(y)), "y contains non-finite values!"
+    assert np.all(np.isfinite(x)), "x contains non-finite values!"
+    assert np.all(np.isfinite(z)), "z contains non-finite values!"
+    assert len(y) == len(x) == z.shape[0], "Mismatched dimensions for y, x, z!"
+
+    # Conversion to R
+    try:
+        y_r = robjects.FloatVector(y)  # Convert y to R vector
+        x_r = robjects.FloatVector(x)  # Convert x to R vector
+        z_r = robjects.r['as.matrix'](numpy2ri.py2rpy(z))  # Convert z to R matrix
+        y_grid_r = robjects.FloatVector(y_grid)
+    except Exception as e:
+        raise RuntimeError(f"Error during conversion: {e}")
+
+    # Validate R-side objects
+    print("R y:", robjects.r['str'](y_r))
+    print("R x:", robjects.r['str'](x_r))
+    print("R z:", robjects.r['str'](z_r))
+
+    # Call the R cdensity function
+    cdensity = robjects.r['cdensity']
+    try:
+        res = cdensity(y=y_r, a=x_r, x=z_r, kmax=kmax, gridlen=gridlen, nsplits=nsplits)
+    except Exception as e:
+        raise RuntimeError(f"Error in cdensity: {e}")
+
+    # Extract g1 and g0
+    g1_function = res.rx2('g1')
+    g0_function = res.rx2('g0')
+    g1_res=g1_function(kmax,y_grid_r)
+    g0_res=g0_function(kmax,y_grid_r)
+    numpy2ri.activate()
+
+    return np.array(g1_res),np.array(g0_res)
+
 
 def rmse(hat_mu, mu):
     return np.sqrt(np.mean((hat_mu-mu)**2))
