@@ -78,14 +78,7 @@ class Frengression(torch.nn.Module):
         self.eval()
         x = x.to(self.device)
         return self.model_y.predict(x, target, sample_size)
-    
-    @torch.no_grad()
-    def predict_conditional(self, xz, sample_size=100):
-        self.eval()
-        xz = xz.to(self.device)
-        eta = self.model_eta(xz)
-        y = self.model_y.predict(torch.cat([x, eta], dim=1), sample_size = sample_size)
-        return y
+
         
     @torch.no_grad()
     def sample_joint(self, sample_size=100):
