@@ -1,6 +1,7 @@
 import torch
 from engression.models import StoNet
 from engression.loss_func import energy_loss_two_sample
+import numpy as np
 sigmoid = torch.nn.Sigmoid()
 
 class Frengression(torch.nn.Module):
@@ -99,6 +100,14 @@ class Frengression(torch.nn.Module):
     def sample_causal_margin(self, x, sample_size=100):
         self.eval()
         y = self.model_y.sample(x, sample_size = sample_size)
+        return y
+    
+    @torch.no_grad()
+    def predict_conditional(self, x, xz, sample_size=100):
+        self.eval()
+        xz = xz.to(self.device)
+        eta = self.model_eta(xz)
+        y = self.model_y.predict(torch.cat([x, eta], dim=1), sample_size = sample_size)
         return y
     
 
@@ -260,3 +269,88 @@ class FrengressionSeq(torch.nn.Module):
         self.model_y = StoNet(self.x_dim + self.y_dim, self.y_dim, self.num_layer, self.hidden_dim, self.noise_dim, add_bn=False, noise_all_layer=False).to(self.device)
         self.model_eta = StoNet(self.x_dim + self.z_dim, self.y_dim, self.num_layer, self.hidden_dim, self.noise_dim, add_bn=False, noise_all_layer=False).to(self.device)
 
+
+# cross-fitting
+from sklearn.model_selection import KFold
+
+
+def cross_fit_frengression(df, binary_intervention, p, outcome_reg=True, k_folds=5, num_iters=1000, lr=1e-4, sample_size=1000):
+    """
+    Perform cross-fitting for the Frengression model.
+
+    Parameters:
+    - df: DataFrame containing the data.
+    - binary_intervention: Boolean indicating if the intervention variable is binary.
+    - p: Number of covariates in the dataset.
+    - k_folds: Number of folds for cross-fitting (default: 5).
+    - outcome_reg: Whether to use conditional outcome regression (True) or marginal outcome (False).
+    - num_iters: Number of iterations for training the model.
+    - lr: Learning rate for training.
+    - n_p: Sample size for predictions.
+
+    Returns:
+    - predictions: Dictionary with keys 'P0', 'P1', and 'ATE' containing the predictions.
+    """
+    kf = KFold(n_splits=k_folds, shuffle=True, random_state=42)
+
+    predictions_P0 = np.zeros(len(df), dtype=float)
+    predictions_P1 = np.zeros(len(df), dtype=float)
+
+    for train_idx, test_idx in kf.split(df):
+        # Split DataFrame into training and test sets
+        df_train = df.iloc[train_idx]
+        df_test = df.iloc[test_idx]
+
+        # Extract x, y, z from the training and test sets
+        z_tr = torch.tensor(df_train[[f"X{i}" for i in range(1, p + 1)]].values, dtype=torch.float32)
+        x_tr= torch.tensor(df_train['A'].values, dtype=torch.int32).view(-1, 1) if binary_intervention else \
+                  torch.tensor(df_train['A'].values, dtype=torch.float32).view(-1, 1)
+        y_tr = torch.tensor(df_train['y'].values, dtype=torch.float32).view(-1, 1)
+
+        z_te = torch.tensor(df_test[[f"X{i}" for i in range(1, p + 1)]].values, dtype=torch.float32)
+        x_te = torch.tensor(df_test['A'].values, dtype=torch.int32).view(-1, 1) if binary_intervention else \
+                 torch.tensor(df_test['A'].values, dtype=torch.float32).view(-1, 1)
+
+        # Initialize and train the Frengression model
+        model = Frengression(x_dim = x_tr.shape[1], y_dim = 1, z_dim =z_tr.shape[1], 
+                             noise_dim=1, num_layer=3, hidden_dim=100, 
+                             device = torch.device('cpu'), x_binary=binary_intervention, z_binary_dims=0)
+
+        model.train_xz(x_tr, z_tr, num_iters=num_iters, lr=lr, print_every_iter=400)
+
+        model.train_y(x_tr, z_tr, y_tr, num_iters=num_iters, lr=lr, print_every_iter=400)
+
+        # Prepare input for predictions
+        x0 = torch.zeros(z_te.shape[0], dtype=torch.int32).reshape(-1, 1) if binary_intervention else \
+            torch.zeros(z_te.shape[0], dtype=torch.float32).reshape(-1, 1)
+        x1 = torch.ones(z_te.shape[0], dtype=torch.int32).reshape(-1, 1) if binary_intervention else \
+            torch.ones(z_te.shape[0], dtype=torch.float32).reshape(-1, 1)
+
+        xz0 = torch.cat([x0, z_te], dim=1)
+        xz1 = torch.cat([x1, z_te], dim=1)
+
+        if outcome_reg:
+            # Predict conditional distributions
+            P0 = model.predict_conditional(x0, xz0, sample_size=sample_size).numpy().reshape(-1, 1)
+            P1 = model.predict_conditional(x1, xz1, sample_size=sample_size).numpy().reshape(-1, 1)
+
+        else:
+            P0 = model.sample_causal_margin(torch.tensor([0], dtype=torch.int32), sample_size=sample_size).numpy().reshape(-1, 1)
+            P1 = model.sample_causal_margin(torch.tensor([1], dtype=torch.int32), sample_size=sample_size).numpy().reshape(-1, 1)
+
+        # Store predictions
+        predictions_P0[test_idx] = P0.mean(axis=1)
+        predictions_P1[test_idx] = P1.mean(axis=1)
+
+    # Calculate ATE
+    ate_predictions = predictions_P1.mean() - predictions_P0.mean()
+
+    return {
+        'P0': predictions_P0,
+        'P1': predictions_P1,
+        'ATE': ate_predictions
+    }
+
+# Example usage:
+# Assuming `FrengressionModel` is the Frengression model class
+# result = cross_fit_frengression(FrengressionModel, df, binary_intervention=True, p=10, k_folds=5, num_iters=1000, lr=1e-4, n_p=100)

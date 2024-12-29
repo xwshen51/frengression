@@ -147,9 +147,9 @@ data.causl <- function(n=10000, nI=3, nX=1, nO=1, nS=1, ate=2, beta_cov=0, stren
 
 data.survivl <- function(n= 1000, T=5, binary_intervention=TRUE, random_seed = 1024){
   formulas <- list(list(),
-                 Z ~ X_l1 + C,
-                 X ~ Z_l0 + C,
-                 Y ~ X_l0 + C,
+                 Z ~ X_l1 + S,
+                 X ~ Z_l0 + S,
+                 Y ~ X_l0 + S,
                  cop ~ 1)
   if(binary_intervention){
     family <- list(5,1,5,5,1)
@@ -159,7 +159,7 @@ data.survivl <- function(n= 1000, T=5, binary_intervention=TRUE, random_seed = 1
     link <- list("logit", "identity", "identity", "inverse")
   }
   
-  pars <- list(C = list(beta=0),
+  pars <- list(S = list(beta=0),
               Z = list(beta = c(-1/2,1/2,0.25), phi=0.5),
               X = list(beta = c(0,1/2,1/10)),
               Y = list(beta = c(0.05,0.5,0.05), phi=1),

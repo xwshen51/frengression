@@ -3,6 +3,7 @@ import pandas as pd
 from scipy.special import expit
 import scipy.stats as stats
 
+
 import rpy2.robjects as robjects
 from rpy2.robjects import pandas2ri,numpy2ri
 from rpy2.robjects.conversion import localconverter
@@ -23,8 +24,9 @@ from sklearn.preprocessing import MinMaxScaler,MaxAbsScaler,StandardScaler
 from sklearn.model_selection import train_test_split
 from scipy.sparse import diags
 
+from sklearn.model_selection import KFold
 from sklearn.linear_model import LogisticRegression, LinearRegression
-from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 
 warnings.filterwarnings("ignore", message="R is not initialized by the main thread")
 
@@ -47,24 +49,111 @@ def generate_data_causl(n=10000, nI = 3, nX= 1, nO = 1, nS = 1, ate = 2, beta_co
         df = robjects.conversion.rpy2py(r_dataframe)
     return df
 
-def dr_ate(x_tr,y_tr,z_tr, x_te, y_te, z_te, ps_model = "lr", or_model = "rf"):
+def dr_ate(x_tr,y_tr,z_tr, x_te, y_te, z_te, ps_model = "lr", or_model = "rf",random_state = 42):
     if ps_model == "lr":
         model = LogisticRegression(random_state=42)
         model.fit(z_tr, x_tr)
         hat_propen = model.predict_proba(z_te)[:, 1]
+    elif ps_model == "rf":
+        model = RandomForestClassifier(random_state=42)
+        model.fit(z_tr, x_tr)
+        hat_propen = model.predict_proba(z_te)[:, 1]
 
-    if or_model == 'rf':
-        model_mu0 = RandomForestRegressor(random_state=42)
-        model_mu0.fit(z_tr[x_tr == 0], y_tr[x_tr == 0])
+    if or_model == "lr":
+        model_mu0 = LinearRegression(random_state=random_state)
+        model_mu1 =  LinearRegression(random_state=random_state)
+    elif or_model == 'rf':
+        model_mu0 = RandomForestRegressor(random_state=random_state)
+        model_mu1 =  RandomForestRegressor(random_state=random_state)
+    model_mu0.fit(z_tr[x_tr == 0], y_tr[x_tr == 0])
+    model_mu1.fit(z_tr[x_tr == 1], y_tr[x_tr == 1])
 
-        model_mu1 =  RandomForestRegressor(random_state=42)
-        model_mu1.fit(z_tr[x_tr == 1], y_tr[x_tr == 1])
     hat_mu0 = model_mu0.predict(z_te)
     hat_mu1 = model_mu1.predict(z_te)
     phi = x_te / hat_propen *(y_te - hat_mu1) + (1-x_te) / (1-hat_propen) *(y_te - hat_mu0) +(hat_mu1 - hat_mu0)
     hat_ate = np.mean(phi)
     hat_sd = np.std(phi)
     return hat_ate, hat_sd
+
+def cross_fit_dr_ate(df, p, k_folds=5, ps_model="lr", or_model="rf", random_state=42):
+    """
+    Perform cross-fitting for doubly robust ATE estimation.
+
+    Parameters:
+    - df: DataFrame containing the data.
+    - p: Number of covariates in the dataset.
+    - k_folds: Number of folds for cross-fitting (default: 5).
+    - ps_model: Propensity score model ('lr' for Logistic Regression, 'rf' for Random Forest).
+    - or_model: Outcome regression model ('lr' for Linear Regression, 'rf' for Random Forest).
+    - random_state: Random state for reproducibility.
+
+    Returns:
+    - results: Dictionary with keys 'ATE' and 'SD' containing the estimated ATE and standard deviation.
+    """
+    kf = KFold(n_splits=k_folds, shuffle=True, random_state=random_state)
+
+    phi_values = []
+
+    for train_idx, test_idx in kf.split(df):
+        # Split DataFrame into training and test sets
+        df_train = df.iloc[train_idx]
+        df_test = df.iloc[test_idx]
+
+        # Extract x, y, z from the training and test sets
+        z_tr = df_train[[f"X{i}" for i in range(1, p + 1)]].values
+        x_tr = df_train['A'].values
+        y_tr = df_train['y'].values
+
+        z_te = df_test[[f"X{i}" for i in range(1, p + 1)]].values
+        x_te = df_test['A'].values
+        y_te = df_test['y'].values
+
+        # Train propensity score model
+        if ps_model == "lr":
+            ps_model_instance = LogisticRegression(random_state=random_state)
+        elif ps_model == "rf":
+            ps_model_instance = RandomForestClassifier(random_state=random_state)
+        else:
+            raise ValueError("Invalid ps_model. Choose 'lr' or 'rf'.")
+
+        ps_model_instance.fit(z_tr, x_tr)
+        hat_propen = ps_model_instance.predict_proba(z_te)[:, 1]
+
+        # Train outcome regression models
+        if or_model == "lr":
+            or_model_mu0 = LinearRegression()
+            or_model_mu1 = LinearRegression()
+        elif or_model == "rf":
+            or_model_mu0 = RandomForestRegressor(random_state=random_state)
+            or_model_mu1 = RandomForestRegressor(random_state=random_state)
+        else:
+            raise ValueError("Invalid or_model. Choose 'lr' or 'rf'.")
+
+        or_model_mu0.fit(z_tr[x_tr == 0], y_tr[x_tr == 0])
+        or_model_mu1.fit(z_tr[x_tr == 1], y_tr[x_tr == 1])
+
+        hat_mu0 = or_model_mu0.predict(z_te)
+        hat_mu1 = or_model_mu1.predict(z_te)
+
+        # Calculate influence function
+        phi = (
+            x_te / hat_propen * (y_te - hat_mu1) +
+            (1 - x_te) / (1 - hat_propen) * (y_te - hat_mu0) +
+            (hat_mu1 - hat_mu0)
+        )
+        phi_values.append(phi)
+
+    # Combine results across folds
+    phi_values = np.concatenate(phi_values)
+    hat_ate = np.mean(phi_values)
+    hat_sd = np.std(phi_values)
+
+    return {
+        'ATE': hat_ate,
+        'SD': hat_sd
+    }
+
+
 
 def npcausal_ctseff(y,x,z,bw_seq=np.linspace(0.2, 2, 100)):
     npcausal = importr('npcausal')
@@ -82,23 +171,6 @@ def npcausal_ctseff(y,x,z,bw_seq=np.linspace(0.2, 2, 100)):
     results_df = pandas2ri.rpy2py(results)
     return results_df
 
-# def npcausal_cdensity(y,x,z,y_grid,kmax=4,gridlen=50,nsplits=5):
-#     npcausal = importr('npcausal')
-#     with suppress_r_output():
-#         # Convert Python data to R
-#         y_r = robjects.FloatVector(y)  # Convert y to R vector
-#         x_r = robjects.FloatVector(x)  # Convert x to R vector
-#         z_r = robjects.r['as.matrix'](numpy2ri.py2rpy(z))
-#         y_grid_r = robjects.FloatVector(y_grid)
-#         # Call the R ctseff function
-#         cdensity= robjects.r['cdensity']
-#         res = cdensity(y=y_r, a=x_r, x=z_r, kmax=kmax,gridlen=gridlen, nsplits=nsplits)
-#         # Extract g1 and g0 from the results
-#         g1_function = res.rx2('g1')  # Extract g1 function from the result
-#         g0_function = res.rx2('g0')  # Extract g0 function from the result
- 
-
-#     return g1_function, g0_function
 
 def npcausal_cdensity(y, x, z, y_grid, kmax=10, gridlen=100, nsplits=2):
     """
@@ -153,7 +225,6 @@ def npcausal_cdensity(y, x, z, y_grid, kmax=10, gridlen=100, nsplits=2):
     numpy2ri.activate()
 
     return np.array(g1_res),np.array(g0_res)
-
 
 def rmse(hat_mu, mu):
     return np.sqrt(np.mean((hat_mu-mu)**2))
