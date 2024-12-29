@@ -295,6 +295,7 @@ def cross_fit_frengression(df, binary_intervention, p, outcome_reg=True, k_folds
 
     predictions_P0 = np.zeros(len(df), dtype=float)
     predictions_P1 = np.zeros(len(df), dtype=float)
+    ate_marginal = 0
 
     for train_idx, test_idx in kf.split(df):
         # Split DataFrame into training and test sets
@@ -329,27 +330,31 @@ def cross_fit_frengression(df, binary_intervention, p, outcome_reg=True, k_folds
         xz0 = torch.cat([x0, z_te], dim=1)
         xz1 = torch.cat([x1, z_te], dim=1)
 
-        if outcome_reg:
-            # Predict conditional distributions
-            P0 = model.predict_conditional(x0, xz0, sample_size=sample_size).numpy().reshape(-1, 1)
-            P1 = model.predict_conditional(x1, xz1, sample_size=sample_size).numpy().reshape(-1, 1)
-
-        else:
-            P0 = model.sample_causal_margin(torch.tensor([0], dtype=torch.int32), sample_size=sample_size).numpy().reshape(-1, 1)
-            P1 = model.sample_causal_margin(torch.tensor([1], dtype=torch.int32), sample_size=sample_size).numpy().reshape(-1, 1)
-
+        # Predict conditional distributions
+        P0 = model.predict_conditional(x0, xz0, sample_size=sample_size).numpy().reshape(-1, 1)
+        P1 = model.predict_conditional(x1, xz1, sample_size=sample_size).numpy().reshape(-1, 1)
         # Store predictions
         predictions_P0[test_idx] = P0.mean(axis=1)
         predictions_P1[test_idx] = P1.mean(axis=1)
 
+        
+
+        if outcome_reg == False:
+            P0_marginal = model.sample_causal_margin(torch.tensor([0], dtype=torch.int32), sample_size=sample_size).numpy().reshape(-1, 1)
+            P1_marginal = model.sample_causal_margin(torch.tensor([1], dtype=torch.int32), sample_size=sample_size).numpy().reshape(-1, 1)
+            ate_marginal += np.mean(P1_marginal) - np.mean(P0_marginal)
+
     # Calculate ATE
     ate_predictions = predictions_P1.mean() - predictions_P0.mean()
 
-    return {
+    result = {
         'P0': predictions_P0,
         'P1': predictions_P1,
         'ATE': ate_predictions
     }
+    if outcome_reg == False:
+        result['ATE_marginal'] = ate_marginal / k_folds
+    return result
 
 # Example usage:
 # Assuming `FrengressionModel` is the Frengression model class
