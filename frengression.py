@@ -180,8 +180,8 @@ class FrengressionSeq(torch.nn.Module):
         xz = xz.to(self.device)
         for i in range(num_iters):
             self.optimizer_xz.zero_grad()
-            sample1 = self.sample_xz(s, x, z)
-            sample2 = self.sample_xz(s, x, z)
+            sample1 = torch.cat(self.sample_xz(s, x, z), dim=1)
+            sample2 = torch.cat(self.sample_xz(s, x, z), dim=1)
             if self.x_binary:
                 sample1[:, :self.x_dim] = sigmoid(sample1[:, :self.x_dim])
                 sample2[:, :self.x_dim] = sigmoid(sample2[:, :self.x_dim])
@@ -243,7 +243,6 @@ class FrengressionSeq(torch.nn.Module):
         self.eval()
         y = self.model_y.sample(x, sample_size = sample_size)
         return y
-    
 
     def specify_causal(self, causal_margin):
         def causal_margin1(x_eta):
