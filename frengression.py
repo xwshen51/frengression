@@ -127,7 +127,7 @@ class FrengressionSeq(torch.nn.Module):
         self.z_binary = z_binary
         self.y_binary = y_binary
         self.device = device
-        self.model_s = StoNet(0, s_dim, num_layer, hidden_dim, max(s_dim, noise_dim), add_bn=False, noise_all_layer=False).to(device)
+        # self.model_s = StoNet(0, s_dim, num_layer, hidden_dim, max(s_dim, noise_dim), add_bn=False, noise_all_layer=False).to(device)
         self.model_xz = [
             StoNet(s_dim, x_dim + z_dim, num_layer, hidden_dim, max(x_dim + z_dim, noise_dim), add_bn=False, noise_all_layer=False).to(device)
         ]
@@ -162,7 +162,7 @@ class FrengressionSeq(torch.nn.Module):
         x_all = [x0]
         z_all = [z0]
         for t in range(1, self.T + 1):
-            xz_p = torch.cat([x[t - 1]] + z[:t], dim=1)
+            xz_p = torch.cat([x[:t], z[:t]], dim=1)
             xz = self.model_xz[t](xz_p)
             xt = xz[:, :self.x_dim]
             zt = xz[:, self.x_dim:]
@@ -180,8 +180,10 @@ class FrengressionSeq(torch.nn.Module):
         xz = xz.to(self.device)
         for i in range(num_iters):
             self.optimizer_xz.zero_grad()
-            sample1 = torch.cat(self.sample_xz(s, x, z), dim=1)
-            sample2 = torch.cat(self.sample_xz(s, x, z), dim=1)
+            sample1_x, sample1_z = self.sample_xz(s, x, z)
+            sample1 = torch.cat([sample1_x, sample1_z], dim=1)
+            sample2_x, sample2_z = self.sample_xz(s, x, z)
+            sample2 = torch.cat([sample2_x, sample2_z], dim=1)
             if self.x_binary:
                 sample1[:, :self.x_dim] = sigmoid(sample1[:, :self.x_dim])
                 sample2[:, :self.x_dim] = sigmoid(sample2[:, :self.x_dim])
@@ -225,7 +227,7 @@ class FrengressionSeq(torch.nn.Module):
         return self.model_y.predict(x, target, sample_size)
         
     @torch.no_grad()
-    def sample_joint(self, sample_size=100):
+    def sample_joint(self, sample_size=100): #???
         self.eval()
         xz = self.model_xz(sample_size)
         eta = self.model_eta(xz)
