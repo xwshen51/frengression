@@ -272,8 +272,6 @@ class FrengressionSeq(torch.nn.Module):
 
 # cross-fitting
 from sklearn.model_selection import KFold
-
-
 def cross_fit_frengression(df, binary_intervention, p, outcome_reg=True, k_folds=5, num_iters=1000, lr=1e-4, sample_size=1000):
     """
     Perform cross-fitting for the Frengression model.
