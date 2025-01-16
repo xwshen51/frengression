@@ -141,27 +141,111 @@ class FrengressionSeq(torch.nn.Module):
         self.z_binary = z_binary
         self.y_binary = y_binary
         self.device = device
-        self.model_s = StoNet(0, s_dim, num_layer, hidden_dim, max(s_dim, noise_dim), add_bn=False, noise_all_layer=False).to(device)
+        # self.model_s = StoNet(0, s_dim, num_layer, hidden_dim, max(s_dim, noise_dim), add_bn=False, noise_all_layer=False).to(device)
+
+        # for xz:
         self.model_xz = [
-            StoNet(s_dim, x_dim + z_dim, num_layer, hidden_dim, max(x_dim + z_dim, noise_dim), add_bn=False, noise_all_layer=False).to(device)
+            StoNet(s_dim, x_dim + z_dim, num_layer, hidden_dim, max(x_dim + z_dim+ydim, noise_dim), add_bn=False, noise_all_layer=False).to(device)
         ]
-        
-        for t in range(T):
+        for t in range(T-1):
             self.model_xz.append(
-                StoNet(s_dim + (x_dim + z_dim + y_dim)*(t + 1), x_dim + z_dim, num_layer, hidden_dim, max(x_dim + z_dim + y_dim, noise_dim), add_bn=False, noise_all_layer=False).to(device)
+                StoNet(s_dim + (x_dim + z_dim + y_dim) * (t + 1), x_dim + z_dim, num_layer, hidden_dim, max(x_dim + z_dim+ydim, noise_dim), add_bn=False, noise_all_layer=False).to(device)
             )
         out_act = 'sigmoid' if y_binary else None
-        self.model_y = StoNet(x_dim*(T + 1) + y_dim, y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act).to(device)
-        self.model_eta = StoNet((x_dim + z_dim)*(T + 1), y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False).to(device)
+       
+        # for y
+        self.model_y = [
+            StoNet(x_dim + y_dim, y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act).to(device)
+        ]
+
+        for t in range(T-1):
+            self.model_y.append(
+                StoNet((x_dim + y_dim) * (t+1), y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act).to(device)
+            )
+        
+        # for eta:
+
+        self.model_eta = [
+            StoNet((x_dim + z_dim), y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False).to(device)
+        ]
+
+        for t in range(T-1):
+            self.model_eta.append(
+                StoNet((x_dim + z_dim)*(t + 1), y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False).to(device)
+            )
+        
     
-    def sample_xz(self, s=None, x=None, z=None):
-        """_summary_ (havent implemented s, x, z)
+    def sample_xz(self, s=None, x=None, z=None, y = None):
+        """_summary_ (havent implemented s, x, z, y are None)
 
         Args:
             s (_type_): _description_
             x (_type_, optional): treatments tensor of shape n * (x_dim*t) or a list of tensors of shape n * x_dim. Defaults to None.
             z (_type_, optional): _description_. Defaults to None.
+            y (_type_, optional): _description_. Defaults to None.
 
+        Returns:
+            _type_: _description_
+        """
+        if x is not None:
+            if not isinstance(x, list):
+                x = list(torch.split(x, self.x_dim, dim=1))
+        if z is not None:
+            if not isinstance(z, list):
+                z = list(torch.split(z, self.z_dim, dim=1))
+        if y is not None:
+            if not isinstance(y, list):
+                y = list(torch.split(y, self.y_dim, dim=1))
+
+        xz = self.model_xz[0](s)
+        x0 = xz[:, :self.x_dim]
+        z0 = xz[:, self.x_dim:]
+        x_all = [x0]
+        z_all = [z0]
+        for t in range(1, self.T):
+            xz_p = torch.cat([x[:t], z[:t], y[:t]], dim=1)
+            xz = self.model_xz[t](xz_p)
+            xt = xz[:, :self.x_dim]
+            zt = xz[:, self.x_dim:]
+            x_all.append(xt)
+            z_all.append(zt)
+        return torch.cat(x_all, dim=1), torch.cat(z_all, dim=1)
+
+    def sample_eta(self, x=None, z=None):
+        """_summary_ (havent implemented x, z are None)
+
+        Args:
+            x (_type_, optional): treatments tensor of shape n * (x_dim*t) or a list of tensors of shape n * x_dim. Defaults to None.
+            z (_type_, optional): _description_. Defaults to None.
+
+        Returns:
+            _type_: _description_
+        """
+        if x is not None:
+            if not isinstance(x, list):
+                x = list(torch.split(x, self.x_dim, dim=1))
+        if z is not None:
+            if not isinstance(z, list):
+                z = list(torch.split(z, self.z_dim, dim=1))
+
+        xz0 = torch.cat([x[0], z[0]], dim=1)
+        eta0 = self.model_eta[0](xz0)
+
+        eta_all = [eta0]
+
+        for t in range(1, self.T):
+            xz_p = torch.cat([x[:(t+1)], z[:(t+1)]], dim=1)
+            etat = self.model_eta[t](xz_p)
+            eta_all.append(etat)
+        return torch.cat(eta_all, dim=1)
+    
+    def sample_y(self, x=None, z=None, eta=None):
+        """_summary_ (havent implemented s, x, z are None)
+
+        Args:
+            s (_type_): _description_
+            x (_type_, optional): treatments tensor of shape n * (x_dim*t) or a list of tensors of shape n * x_dim. Defaults to None.
+            z (_type_, optional): _description_. Defaults to None.
 
         Returns:
             _type_: _description_
@@ -173,44 +257,36 @@ class FrengressionSeq(torch.nn.Module):
             if not isinstance(z, list):
                 z = list(torch.split(z, self.z_dim, dim=1))
         
-        xz = self.model_xz[0](s)
-        x0 = xz[:, :self.x_dim]
-        z0 = xz[:, self.x_dim:]
+        if eta is not None:
+            if not isinstance(eta, list):
+                eta = list(torch.split(eta, self.y_dim, dim=1))
 
-        x_all = [x0]
-        z_all = [z0]
+        xzeta0 = torch.cat([x[0], z[0], eta[0]], dim=1)
+        y0 = self.model_y[0](xzeta0)
 
-        for t in range(1, self.T + 1):
-            xz_p = torch.cat([x[t - 1]] + z[:t], dim=1)
-            xz = self.model_xz[t](xz_p)
-            xt = xz[:, :self.x_dim]
-            zt = xz[:, self.x_dim:]
+        y_all = [y0]
 
-            x_all.append(xt)
-            z_all.append(zt)
-        return torch.cat(x_all, dim=1), torch.cat(z_all, dim=1)
+        for t in range(1, self.T):
+            xzeta_p = torch.cat([x[:(t+1)], z[:(t+1)], eta[:(t+1)]], dim=1)
+            yt = self.model_y[t](xzeta_p)
+            y_all.append(yt)
+        return torch.cat(y_all, dim=1)
+
         
     def train_xz(self, x, z, y, s, num_iters=100, lr=1e-3, print_every_iter=10):
-        """
-        Train the XZ generators with dependencies on previous X, Y, Z
-        Args:
-            x: Tensor of shape (batch_size, T * x_dim)
-            z: Tensor of shape (batch_size, T * z_dim)
-            y: Tensor of shape (batch_size, T * y_dim)
-            s: Tensor of shape (batch_size, s_dim)
-        """
         self.model_xz.train()
-
         all_parameters = []
-        for t in range(self.T + 1):
+        for t in range(self.T):
             all_parameters += list(self.model_xz[t].parameters())
         self.optimizer_xz = torch.optim.Adam(all_parameters, lr=lr)
         xz = torch.cat([x, z], dim=1)
         xz = xz.to(self.device)
         for i in range(num_iters):
             self.optimizer_xz.zero_grad()
-            sample1 = self.sample_xz(s, x, z)
-            sample2 = self.sample_xz(s, x, z)
+            sample1_x, sample1_z = self.sample_xz(s, x, z)
+            sample1 = torch.cat([sample1_x, sample1_z], dim=1)
+            sample2_x, sample2_z = self.sample_xz(s, x, z)
+            sample2 = torch.cat([sample2_x, sample2_z], dim=1)
             if self.x_binary:
                 sample1[:, :self.x_dim] = sigmoid(sample1[:, :self.x_dim])
                 sample2[:, :self.x_dim] = sigmoid(sample2[:, :self.x_dim])
@@ -226,20 +302,29 @@ class FrengressionSeq(torch.nn.Module):
     def train_y(self, x, z, y, num_iters=100, lr=1e-3, print_every_iter=10):
         self.model_y.train()
         self.model_eta.train()
-        self.optimizer_y = torch.optim.Adam(list(self.model_y.parameters()) + list(self.model_eta.parameters()), lr=lr)
+        # all_parameters_y = []
+        # all_parameters_eta= []
+        all_parameters = []
+        for t in range(self.T):
+            all_parameters +=list(self.model_y[t].parameters()) + list(self.model_eta[t].parameters())
+        self.optimizer_y = torch.optim.Adam(all_parameters, lr=lr)
+
+
         x = x.to(self.device)
         y = y.to(self.device)
+        z = z.to(self.device)
         xz = torch.cat([x, z], dim=1)
         xz = xz.to(self.device)
         for i in range(num_iters):
-            eta1 = self.model_eta(xz)
-            eta2 = self.model_eta(xz)
-            y_sample1 = self.model_y(torch.cat([x, eta1], dim=1))
-            y_sample2 = self.model_y(torch.cat([x, eta2], dim=1))
+            eta1 = self.sample_eta(x,z)
+            eta2 = self.sample_eta(x,z)
+            y_sample1 = self.sample_y(x,z,eta1)
+            y_sample2 = self.sample_y(x,z,eta2)
             loss_y, loss1_y, loss2_y = energy_loss_two_sample(y, y_sample1, y_sample2)
-            eta_true = torch.randn(y.size(), device=self.device)
-            eta1 = self.model_eta(xz)
-            eta2 = self.model_eta(xz[torch.randperm(x.size(0))])
+            
+            eta_true = torch.randn(y.size()* self.T, device=self.device)
+            eta1 = self.sample_eta(x,z)
+            eta2 = self.sample_eta(x[torch.randperm(x.size(0))],z[torch.randperm(z.size(0))])
             loss_eta, loss1_eta, loss2_eta = energy_loss_two_sample(eta_true, eta1, eta2)
             loss = loss_y + loss_eta
             loss.backward()
@@ -248,13 +333,23 @@ class FrengressionSeq(torch.nn.Module):
                 print(f'Epoch {i + 1}: loss {loss.item():.4f},\tloss_y {loss_y.item():.4f}, {loss1_y.item():.4f}, {loss2_y.item():.4f},\tloss_eta {loss_eta.item():.4f}, {loss1_eta.item():.4f}, {loss2_eta.item():.4f}')
     
     @torch.no_grad()
+    def predict_causal_t(self, xt, target="mean", sample_size=100):
+        self.eval()
+        xt = xt.to(self.device)
+        return self.model_y[t].predict(xt, target, sample_size)
+
+    @torch.no_grad()
     def predict_causal(self, x, target="mean", sample_size=100):
         self.eval()
         x = x.to(self.device)
-        return self.model_y.predict(x, target, sample_size)
+        all_y=[]
+        for t in range(self.T):
+            yt = self.predict_causal_t(x[t], target, sample_size)
+            all_y.append(yt)
+        return all_y
         
     @torch.no_grad()
-    def sample_joint(self, sample_size=100):
+    def sample_joint(self, sample_size=100): #???
         self.eval()
         xz = self.model_xz(sample_size)
         eta = self.model_eta(xz)
@@ -268,22 +363,32 @@ class FrengressionSeq(torch.nn.Module):
         return x, y, z
 
     @torch.no_grad()
+    def sample_causal_margin_t(self, xt, sample_size=100):
+        self.eval()
+        xt = xt.to(self.device)
+        yt = self.model_y[t].sample(xt, sample_size = sample_size)
+        return yt
+    
+    @torch.no_grad()
     def sample_causal_margin(self, x, sample_size=100):
         self.eval()
-        y = self.model_y.sample(x, sample_size = sample_size)
-        return y
+        x = x.to(self.device)
+        all_y = []
+        for t in range(self.T):
+            yt = self.model_y[t].sample(x[t], sample_size = sample_size)
+            all_y.append(yt)
+        return all_y
 
-    def specify_causal(self, causal_margin):
-        def causal_margin1(x_eta):
-            x = x_eta[:, :self.x_dim]
-            eta = x_eta[:, self.x_dim:]
-            return causal_margin(x, eta)
-        self.model_y = causal_margin1
+    # def specify_causal(self, causal_margin):
+    #     def causal_margin1(x_eta):
+    #         x = x_eta[:, :self.x_dim]
+    #         eta = x_eta[:, self.x_dim:]
+    #         return causal_margin(x, eta)
+    #     self.model_y = causal_margin1
     
-    def reset_y_models(self):
-        self.model_y = StoNet(self.x_dim + self.y_dim, self.y_dim, self.num_layer, self.hidden_dim, self.noise_dim, add_bn=False, noise_all_layer=False).to(self.device)
-        self.model_eta = StoNet(self.x_dim + self.z_dim, self.y_dim, self.num_layer, self.hidden_dim, self.noise_dim, add_bn=False, noise_all_layer=False).to(self.device)
-
+    # def reset_y_models(self):
+    #     self.model_y = StoNet(self.x_dim + self.y_dim, self.y_dim, self.num_layer, self.hidden_dim, self.noise_dim, add_bn=False, noise_all_layer=False).to(self.device)
+    #     self.model_eta = StoNet(self.x_dim + self.z_dim, self.y_dim, self.num_layer, self.hidden_dim, self.noise_dim, add_bn=False, noise_all_layer=False).to(self.device)
 
 # cross-fitting
 from sklearn.model_selection import KFold
