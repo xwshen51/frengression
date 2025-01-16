@@ -186,7 +186,7 @@ data.survivl <- function(n=1000, T=10, random_seed = 1024){
               Y=list(beta=c(0,0.5),phi=1),
               cop=list(beta=0.5))
   set.seed(random_seed)
-  dat <- msm_samp(10, T=T, formulas = forms, family = fams, pars = pars, control=list(surv=FALSE))
+  dat <- msm_samp(n=n, T=T, formulas = forms, family = fams, pars = pars, control=list(surv=FALSE))
   df <- surv_to_long(dat)
 
   # colnames(df) <- c(paste("X", 1:p, sep = ""), 'A', 'status', 'y')

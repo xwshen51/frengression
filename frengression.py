@@ -151,6 +151,7 @@ class FrengressionSeq(torch.nn.Module):
             self.model_xz.append(
                 StoNet(s_dim + (x_dim + z_dim + y_dim) * (t + 1), x_dim + z_dim, num_layer, hidden_dim, max(x_dim + z_dim+y_dim, noise_dim), add_bn=False, noise_all_layer=False).to(device)
             )
+        
         out_act = 'sigmoid' if y_binary else None
        
         # for y
@@ -164,7 +165,6 @@ class FrengressionSeq(torch.nn.Module):
             )
         
         # for eta:
-
         self.model_eta = [
             StoNet((x_dim + z_dim), y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False).to(device)
         ]
@@ -215,7 +215,9 @@ class FrengressionSeq(torch.nn.Module):
 
         
     def train_xz(self, x, z, y, s, num_iters=100, lr=1e-3, print_every_iter=10):
-        self.model_xz.train()
+        for model in self.model_xz:
+            model.train()
+        
         all_parameters = []
         for t in range(self.T):
             all_parameters += list(self.model_xz[t].parameters())
@@ -224,9 +226,9 @@ class FrengressionSeq(torch.nn.Module):
         xz = xz.to(self.device)
         for i in range(num_iters):
             self.optimizer_xz.zero_grad()
-            sample1_x, sample1_z = self.sample_xz(s, x, z)
+            sample1_x, sample1_z = self.sample_xz(s, x, z,y)
             sample1 = torch.cat([sample1_x, sample1_z], dim=1)
-            sample2_x, sample2_z = self.sample_xz(s, x, z)
+            sample2_x, sample2_z = self.sample_xz(s, x, z,y)
             sample2 = torch.cat([sample2_x, sample2_z], dim=1)
             if self.x_binary:
                 sample1[:, :self.x_dim] = sigmoid(sample1[:, :self.x_dim])
