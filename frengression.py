@@ -176,18 +176,6 @@ class FrengressionSeq(torch.nn.Module):
         
     
     def sample_xz(self, s=None, x=None, z=None, y = None):
-        """_summary_ (havent implemented s, x, z, y are None)
-
-        Args:
-            s (_type_): _description_
-            x (_type_, optional): treatments tensor of shape n * (x_dim*t) or a list of tensors of shape n * x_dim. Defaults to None.
-            z (_type_, optional): _description_. Defaults to None.
-            y (_type_, optional): _description_. Defaults to None.
-
-        Returns:
-            _type_: _description_
-        """
-
         xz = self.model_xz[0](s)
         x0 = xz[:, :self.x_dim]
         z0 = xz[:, self.x_dim:]
@@ -203,62 +191,24 @@ class FrengressionSeq(torch.nn.Module):
         return torch.cat(x_all, dim=1), torch.cat(z_all, dim=1)
 
     def sample_eta(self, x=None, z=None):
-        """_summary_ (havent implemented x, z are None)
-
-        Args:
-            x (_type_, optional): treatments tensor of shape n * (x_dim*t) or a list of tensors of shape n * x_dim. Defaults to None.
-            z (_type_, optional): _description_. Defaults to None.
-
-        Returns:
-            _type_: _description_
-        """
-        if x is not None:
-            if not isinstance(x, list):
-                x = list(torch.split(x, self.x_dim, dim=1))
-        if z is not None:
-            if not isinstance(z, list):
-                z = list(torch.split(z, self.z_dim, dim=1))
-
-        xz0 = torch.cat([x[0], z[0]], dim=1)
+        xz0 = torch.cat([x[:, :self.x_dim], z[:,:self.z_dim]], dim=1)
         eta0 = self.model_eta[0](xz0)
-
         eta_all = [eta0]
 
         for t in range(1, self.T):
-            xz_p = torch.cat([x[:(t+1)], z[:(t+1)]], dim=1)
+            xz_p = torch.cat([x[:, :((t+1)*self.x_dim)], z[:,:((t+1)*self.z_dim)]], dim=1)
             etat = self.model_eta[t](xz_p)
             eta_all.append(etat)
         return torch.cat(eta_all, dim=1)
     
     def sample_y(self, x=None, z=None, eta=None):
-        """_summary_ (havent implemented s, x, z are None)
-
-        Args:
-            s (_type_): _description_
-            x (_type_, optional): treatments tensor of shape n * (x_dim*t) or a list of tensors of shape n * x_dim. Defaults to None.
-            z (_type_, optional): _description_. Defaults to None.
-
-        Returns:
-            _type_: _description_
-        """
-        if x is not None:
-            if not isinstance(x, list):
-                x = list(torch.split(x, self.x_dim, dim=1))
-        if z is not None:
-            if not isinstance(z, list):
-                z = list(torch.split(z, self.z_dim, dim=1))
-        
-        if eta is not None:
-            if not isinstance(eta, list):
-                eta = list(torch.split(eta, self.y_dim, dim=1))
-
-        xzeta0 = torch.cat([x[0], z[0], eta[0]], dim=1)
+        xzeta0 = torch.cat([x[:,:self.x_dim], z[:,:self.z_dim], eta[:,:self.y_dim]], dim=1)
         y0 = self.model_y[0](xzeta0)
 
         y_all = [y0]
 
         for t in range(1, self.T):
-            xzeta_p = torch.cat([x[:(t+1)], z[:(t+1)], eta[:(t+1)]], dim=1)
+            xzeta_p = torch.cat([x[:,:((t+1)*self.x_dim)], z[:, :((t+1)*self.z_dim)], eta[:, :((t+1)*self.y_dim)]], dim=1)
             yt = self.model_y[t](xzeta_p)
             y_all.append(yt)
         return torch.cat(y_all, dim=1)
