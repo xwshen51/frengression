@@ -159,7 +159,7 @@ class FrengressionSeq(torch.nn.Module):
             StoNet(x_dim + y_dim, y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act).to(device)
         ]
 
-        for t in range(T-1):
+        for t in range(1,T):
             self.model_y.append(
                 StoNet((x_dim + y_dim) * (t+1), y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act).to(device)
             )
@@ -169,7 +169,7 @@ class FrengressionSeq(torch.nn.Module):
             StoNet((x_dim + z_dim), y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False).to(device)
         ]
 
-        for t in range(T-1):
+        for t in range(1,T):
             self.model_eta.append(
                 StoNet((x_dim + z_dim)*(t + 1), y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False).to(device)
             )
@@ -201,15 +201,15 @@ class FrengressionSeq(torch.nn.Module):
             eta_all.append(etat)
         return torch.cat(eta_all, dim=1)
     
-    def sample_y(self, x=None, z=None, eta=None):
-        xzeta0 = torch.cat([x[:,:self.x_dim], z[:,:self.z_dim], eta[:,:self.y_dim]], dim=1)
-        y0 = self.model_y[0](xzeta0)
+    def sample_y(self, x=None, eta=None):
+        xeta0 = torch.cat([x[:,:self.x_dim], eta[:,:self.y_dim]], dim=1)
+        y0 = self.model_y[0](xeta0)
 
         y_all = [y0]
 
         for t in range(1, self.T):
-            xzeta_p = torch.cat([x[:,:((t+1)*self.x_dim)], z[:, :((t+1)*self.z_dim)], eta[:, :((t+1)*self.y_dim)]], dim=1)
-            yt = self.model_y[t](xzeta_p)
+            xeta_p = torch.cat([x[:,:((t+1)*self.x_dim)], eta[:, :((t+1)*self.y_dim)]], dim=1)
+            yt = self.model_y[t](xeta_p)
             y_all.append(yt)
         return torch.cat(y_all, dim=1)
 
@@ -262,8 +262,8 @@ class FrengressionSeq(torch.nn.Module):
         for i in range(num_iters):
             eta1 = self.sample_eta(x,z)
             eta2 = self.sample_eta(x,z)
-            y_sample1 = self.sample_y(x,z,eta1)
-            y_sample2 = self.sample_y(x,z,eta2)
+            y_sample1 = self.sample_y(x,eta1)
+            y_sample2 = self.sample_y(x,eta2)
             loss_y, loss1_y, loss2_y = energy_loss_two_sample(y, y_sample1, y_sample2)
             
             eta_true = torch.randn(y.size(), device=self.device)
