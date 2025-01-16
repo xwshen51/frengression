@@ -8,6 +8,9 @@ from scipy.special import expit
 import urllib
 import zipfile
 from CausalEGM import *
+#twins https://github.com/AMLab-Amsterdam/CEVAE/blob/master/datasets/TWINS/twin_pairs_Y_3years_samesex.csv
+
+
 # Class reproducing the ACIC 2016 dataset
 class ACIC2016(object):
     def __init__(self, setting=1, exp_num=1, one_hot_factors=True, device='cpu', dataset='train', path_data="../data", tensor=True, seed=0, train_size=0.6, val_size=0.2, scale=True):
