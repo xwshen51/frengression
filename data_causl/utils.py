@@ -85,7 +85,12 @@ def generate_data_survivl(n=10000, T=10, random_seed=1024):
         z_list.append(df[z_col].values.reshape(-1, 1))  # Assuming z_dim=1
         y_list.append(df[y_col].values.reshape(-1, 1))  # Assuming y_dim=1
 
-    return x_list, z_list, y_list
+    # Concatenate along the second dimension to form [n, T * x_dim], etc.
+    x_array = np.concatenate(x_list, axis=1)  # Shape: [n, T * x_dim]
+    z_array = np.concatenate(z_list, axis=1)  # Shape: [n, T * z_dim]
+    y_array = np.concatenate(y_list, axis=1)  # Shape: [n, T * y_dim]
+
+    return s, x_array, z_array, y_array
 
 
 def dr_ate(x_tr,y_tr,z_tr, x_te, y_te, z_te, ps_model = "lr", or_model = "rf",random_state = 42):

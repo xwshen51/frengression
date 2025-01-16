@@ -145,11 +145,11 @@ class FrengressionSeq(torch.nn.Module):
 
         # for xz:
         self.model_xz = [
-            StoNet(s_dim, x_dim + z_dim, num_layer, hidden_dim, max(x_dim + z_dim+ydim, noise_dim), add_bn=False, noise_all_layer=False).to(device)
+            StoNet(s_dim, x_dim + z_dim, num_layer, hidden_dim, max(x_dim + z_dim+y_dim, noise_dim), add_bn=False, noise_all_layer=False).to(device)
         ]
         for t in range(T-1):
             self.model_xz.append(
-                StoNet(s_dim + (x_dim + z_dim + y_dim) * (t + 1), x_dim + z_dim, num_layer, hidden_dim, max(x_dim + z_dim+ydim, noise_dim), add_bn=False, noise_all_layer=False).to(device)
+                StoNet(s_dim + (x_dim + z_dim + y_dim) * (t + 1), x_dim + z_dim, num_layer, hidden_dim, max(x_dim + z_dim+y_dim, noise_dim), add_bn=False, noise_all_layer=False).to(device)
             )
         out_act = 'sigmoid' if y_binary else None
        
@@ -187,15 +187,6 @@ class FrengressionSeq(torch.nn.Module):
         Returns:
             _type_: _description_
         """
-        if x is not None:
-            if not isinstance(x, list):
-                x = list(torch.split(x, self.x_dim, dim=1))
-        if z is not None:
-            if not isinstance(z, list):
-                z = list(torch.split(z, self.z_dim, dim=1))
-        if y is not None:
-            if not isinstance(y, list):
-                y = list(torch.split(y, self.y_dim, dim=1))
 
         xz = self.model_xz[0](s)
         x0 = xz[:, :self.x_dim]
@@ -203,7 +194,7 @@ class FrengressionSeq(torch.nn.Module):
         x_all = [x0]
         z_all = [z0]
         for t in range(1, self.T):
-            xz_p = torch.cat([x[:t], z[:t], y[:t]], dim=1)
+            xz_p = torch.cat([x[:,:(t*self.x_dim)], z[:,:(t*self.z_dim)], y[:, :(t*self.y_dim)]], dim=1)
             xz = self.model_xz[t](xz_p)
             xt = xz[:, :self.x_dim]
             zt = xz[:, self.x_dim:]
@@ -349,9 +340,10 @@ class FrengressionSeq(torch.nn.Module):
         return all_y
         
     @torch.no_grad()
-    def sample_joint(self, sample_size=100): #???
+    def sample_joint(self, s_new,sample_size=100): #???
         self.eval()
-        xz = self.model_xz(sample_size)
+        
+        xz = self.model_xz(s_new)
         eta = self.model_eta(xz)
         x = xz[:, :self.x_dim]
         z = xz[:, self.x_dim:]
