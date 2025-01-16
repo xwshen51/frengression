@@ -268,7 +268,8 @@ class FrengressionSeq(torch.nn.Module):
             
             eta_true = torch.randn(y.size(), device=self.device)
             eta1 = self.sample_eta(x,z)
-            eta2 = self.sample_eta(x[torch.randperm(x.size(0))],z[torch.randperm(z.size(0))])
+            perm = torch.randperm(x.size(0))
+            eta2 = self.sample_eta(x[perm],z[perm])
             loss_eta, loss1_eta, loss2_eta = energy_loss_two_sample(eta_true, eta1, eta2)
             loss = loss_y + loss_eta
             loss.backward()
