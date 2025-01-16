@@ -87,6 +87,7 @@ def generate_data_survivl(n=10000, T=10, random_seed=1024):
 
     return x_list, z_list, y_list
 
+
 def dr_ate(x_tr,y_tr,z_tr, x_te, y_te, z_te, ps_model = "lr", or_model = "rf",random_state = 42):
     if ps_model == "lr":
         model = LogisticRegression(random_state=42)

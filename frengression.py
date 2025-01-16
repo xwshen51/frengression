@@ -145,21 +145,23 @@ class FrengressionSeq(torch.nn.Module):
         self.model_xz = [
             StoNet(s_dim, x_dim + z_dim, num_layer, hidden_dim, max(x_dim + z_dim, noise_dim), add_bn=False, noise_all_layer=False).to(device)
         ]
+        
         for t in range(T):
             self.model_xz.append(
-                StoNet(s_dim + (x_dim + z_dim)*(t + 1), x_dim + z_dim, num_layer, hidden_dim, max(x_dim + z_dim, noise_dim), add_bn=False, noise_all_layer=False).to(device)
+                StoNet(s_dim + (x_dim + z_dim + y_dim)*(t + 1), x_dim + z_dim, num_layer, hidden_dim, max(x_dim + z_dim + y_dim, noise_dim), add_bn=False, noise_all_layer=False).to(device)
             )
         out_act = 'sigmoid' if y_binary else None
         self.model_y = StoNet(x_dim*(T + 1) + y_dim, y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act).to(device)
         self.model_eta = StoNet((x_dim + z_dim)*(T + 1), y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False).to(device)
     
     def sample_xz(self, s=None, x=None, z=None):
-        """_summary_ (havent implemented s, x, z are None)
+        """_summary_ (havent implemented s, x, z)
 
         Args:
             s (_type_): _description_
             x (_type_, optional): treatments tensor of shape n * (x_dim*t) or a list of tensors of shape n * x_dim. Defaults to None.
             z (_type_, optional): _description_. Defaults to None.
+
 
         Returns:
             _type_: _description_
@@ -170,22 +172,35 @@ class FrengressionSeq(torch.nn.Module):
         if z is not None:
             if not isinstance(z, list):
                 z = list(torch.split(z, self.z_dim, dim=1))
+        
         xz = self.model_xz[0](s)
         x0 = xz[:, :self.x_dim]
         z0 = xz[:, self.x_dim:]
+
         x_all = [x0]
         z_all = [z0]
+
         for t in range(1, self.T + 1):
             xz_p = torch.cat([x[t - 1]] + z[:t], dim=1)
             xz = self.model_xz[t](xz_p)
             xt = xz[:, :self.x_dim]
             zt = xz[:, self.x_dim:]
+
             x_all.append(xt)
             z_all.append(zt)
         return torch.cat(x_all, dim=1), torch.cat(z_all, dim=1)
         
-    def train_xz(self, x, z, s, num_iters=100, lr=1e-3, print_every_iter=10):
+    def train_xz(self, x, z, y, s, num_iters=100, lr=1e-3, print_every_iter=10):
+        """
+        Train the XZ generators with dependencies on previous X, Y, Z
+        Args:
+            x: Tensor of shape (batch_size, T * x_dim)
+            z: Tensor of shape (batch_size, T * z_dim)
+            y: Tensor of shape (batch_size, T * y_dim)
+            s: Tensor of shape (batch_size, s_dim)
+        """
         self.model_xz.train()
+
         all_parameters = []
         for t in range(self.T + 1):
             all_parameters += list(self.model_xz[t].parameters())
@@ -272,8 +287,6 @@ class FrengressionSeq(torch.nn.Module):
 
 # cross-fitting
 from sklearn.model_selection import KFold
-
-
 def cross_fit_frengression(df, binary_intervention, p, outcome_reg=True, k_folds=5, num_iters=1000, lr=1e-4, sample_size=1000):
     """
     Perform cross-fitting for the Frengression model.
