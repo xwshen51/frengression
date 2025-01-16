@@ -243,10 +243,11 @@ class FrengressionSeq(torch.nn.Module):
                 print(f'Epoch {i + 1}: loss {loss.item():.4f}, loss1 {loss1.item():.4f}, loss2 {loss2.item():.4f}')
     
     def train_y(self, x, z, y, num_iters=100, lr=1e-3, print_every_iter=10):
-        self.model_y.train()
-        self.model_eta.train()
-        # all_parameters_y = []
-        # all_parameters_eta= []
+        for model in self.model_y:
+            model.train()
+        for model in self.model_eta:
+            model.train()
+
         all_parameters = []
         for t in range(self.T):
             all_parameters +=list(self.model_y[t].parameters()) + list(self.model_eta[t].parameters())
@@ -265,7 +266,7 @@ class FrengressionSeq(torch.nn.Module):
             y_sample2 = self.sample_y(x,z,eta2)
             loss_y, loss1_y, loss2_y = energy_loss_two_sample(y, y_sample1, y_sample2)
             
-            eta_true = torch.randn(y.size()* self.T, device=self.device)
+            eta_true = torch.randn(y.size(), device=self.device)
             eta1 = self.sample_eta(x,z)
             eta2 = self.sample_eta(x[torch.randperm(x.size(0))],z[torch.randperm(z.size(0))])
             loss_eta, loss1_eta, loss2_eta = energy_loss_two_sample(eta_true, eta1, eta2)
