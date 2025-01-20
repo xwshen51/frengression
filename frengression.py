@@ -165,7 +165,8 @@ class FrengressionSeq(torch.nn.Module):
         # generate y1 onwards
         for t in range(1,T):
             self.model_y.append(
-                StoNet((x_dim + y_dim) * (t+1), y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act).to(device)
+                StoNet(x_dim * (t+1)+ y_dim, y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act).to(device)
+                # StoNet((x_dim+y_dim) * (t+1), y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act).to(device)
             )
         
         # for eta:
@@ -183,6 +184,10 @@ class FrengressionSeq(torch.nn.Module):
         xz = self.model_xz[0](s)
         x0 = xz[:, :self.x_dim]
         z0 = xz[:, self.x_dim:]
+        if self.x_binary:
+            x0 = (x0 > 0).float()
+        if self.z_binary:
+            z0 = (z0 > 0).float()
         x_all = [x0]
         z_all = [z0]
         for t in range(1, self.T):
@@ -190,6 +195,9 @@ class FrengressionSeq(torch.nn.Module):
             xz = self.model_xz[t](xz_p)
             xt = xz[:, :self.x_dim]
             zt = xz[:, self.x_dim:]
+            if self.x_binary:
+                xt = (xt > 0).float()
+                zt = (zt > 0).float()
             x_all.append(xt)
             z_all.append(zt)
         return torch.cat(x_all, dim=1), torch.cat(z_all, dim=1)
@@ -212,7 +220,8 @@ class FrengressionSeq(torch.nn.Module):
         y_all = [y0]
 
         for t in range(1, self.T):
-            xeta_p = torch.cat([x[:,:((t+1)*self.x_dim)], eta[:, :((t+1)*self.y_dim)]], dim=1)
+            # xeta_p = torch.cat([x[:,:((t+1)*self.x_dim)], eta[:, :((t+1)*self.y_dim)]], dim=1)
+            xeta_p = torch.cat([x[:,:((t+1)*self.x_dim)], eta[:, (t*self.y_dim):((t+1)*self.y_dim)]], dim=1)
             yt = self.model_y[t](xeta_p)
             y_all.append(yt)
         return torch.cat(y_all, dim=1)
@@ -288,7 +297,7 @@ class FrengressionSeq(torch.nn.Module):
         x = x.to(self.device)
         all_y=[]
         for t in range(self.T):
-            yt = self.model_y[t].predict(x[:(t+1)*self.x_dim], target, sample_size)
+            yt = self.model_y[t].predict(x[:,:(t+1)*self.x_dim], target, sample_size)
             all_y.append(yt)
         return all_y
         
@@ -314,7 +323,7 @@ class FrengressionSeq(torch.nn.Module):
         x = x.to(self.device)
         all_y = []
         for t in range(self.T):
-            yt = self.model_y[t].sample(x[:(t+1)*self.x_dim], sample_size = sample_size)
+            yt = self.model_y[t].sample(x[:,:(t+1)*self.x_dim], sample_size = sample_size)
             all_y.append(yt)
         return all_y
 
