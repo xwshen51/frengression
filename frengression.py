@@ -147,12 +147,12 @@ class FrengressionSeq(torch.nn.Module):
         # for xz:
         # generate x0z0
         self.model_xz = [
-            StoNet(s_dim, x_dim + z_dim, num_layer, hidden_dim, max(x_dim + z_dim, noise_dim), add_bn=False, noise_all_layer=False).to(device)
+            StoNet(s_dim, x_dim + z_dim, num_layer, hidden_dim, max(x_dim + z_dim, noise_dim), add_bn=False, noise_all_layer=False,verbose=False).to(device)
         ]
         #generate x1z1 to xTzT
         for t in range(T-1):
             self.model_xz.append(
-                StoNet(s_dim + (x_dim + z_dim + y_dim) * (t + 1), x_dim + z_dim, num_layer, hidden_dim, max(x_dim + z_dim+y_dim, noise_dim), add_bn=False, noise_all_layer=False).to(device)
+                StoNet(s_dim + (x_dim + z_dim + y_dim) * (t + 1), x_dim + z_dim, num_layer, hidden_dim, max(x_dim + z_dim+y_dim, noise_dim), add_bn=False, noise_all_layer=False,verbose=False).to(device)
             )
         
         out_act = 'sigmoid' if y_binary else None
@@ -160,23 +160,23 @@ class FrengressionSeq(torch.nn.Module):
         # for y
         # generate y0
         self.model_y = [
-            StoNet(x_dim + y_dim, y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act).to(device)
+            StoNet(x_dim + y_dim, y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act,verbose=False).to(device)
         ]
         # generate y1 onwards
         for t in range(1,T):
             self.model_y.append(
-                StoNet(x_dim * (t+1)+ y_dim, y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act).to(device)
+                StoNet(x_dim * (t+1)+ y_dim, y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act,verbose=False).to(device)
                 # StoNet((x_dim+y_dim) * (t+1), y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act).to(device)
             )
         
         # for eta:
         self.model_eta = [
-            StoNet(x_dim + z_dim, y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False).to(device)
+            StoNet(x_dim + z_dim, y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False,verbose=False).to(device)
         ]
 
         for t in range(1,T):
             self.model_eta.append(
-                StoNet((x_dim + z_dim)*(t + 1), y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False).to(device)
+                StoNet((x_dim + z_dim)*(t + 1), y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, verbose=False).to(device)
             )
         
     
