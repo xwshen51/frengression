@@ -49,13 +49,13 @@ def generate_data_causl(n=10000, nI = 3, nX= 1, nO = 1, nS = 1, ate = 2, beta_co
         df = robjects.conversion.rpy2py(r_dataframe)
     return df
 
-def generate_data_survivl(n=10000, T=10, random_seed=1024):
+def generate_data_longitudinl(n=10000, T=10, random_seed=1024):
     pandas2ri.activate()
     # Source the ./data.r script for data.causl dgp function
     with suppress_r_output():
         robjects.r['source'](r'data_causl/data_causl.R')
-        generate_data_survivl = robjects.globalenv['data.survivl']
-        r_dataframe = generate_data_survivl(n=n, T=T, random_seed=random_seed)
+        generate_data_longitudinl = robjects.globalenv['data.longitudinl']
+        r_dataframe = generate_data_longitudinl(n=n, T=T, random_seed=random_seed)
     # Use the localconverter context manager to convert the R dataframe to a Pandas DataFrame
     with localconverter(robjects.default_converter + pandas2ri.converter):
         df = robjects.conversion.rpy2py(r_dataframe)
