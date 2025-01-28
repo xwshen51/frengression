@@ -173,7 +173,7 @@ data.causl <- function(n=10000, nI=3, nX=1, nO=1, nS=1, ate=2, beta_cov=0, stren
 
 
 # an example of simulating data from survivl msm
-data.longitudinl <- function(n=1000, T=10, random_seed = 42){
+data.longitudinl <- function(n=1000, T=10, random_seed = 42, C_coeff = 0){
   forms <- list(C ~ 1,
                 Z ~ X_l1+Z_l1+C,
                 X ~ Z_l0+C,
@@ -184,39 +184,32 @@ data.longitudinl <- function(n=1000, T=10, random_seed = 42){
               Z=list(beta=c(-1/2,1/2,1/2,0.25),phi=0.5),
               # X=list(beta=c(0,0.5,0.25),phi=1),
               X = list(beta = c(0,1/2,1/10)),
-              Y=list(beta=c(0, 2),phi=1),
+              Y=list(beta=c(0, 2, C_coeff),phi=1),
               cop=list(beta=0.5))
 
-  
   set.seed(random_seed)
   dat <- msm_samp(n=n, T=T, formulas = forms, family = fams, pars = pars, control=list(surv=FALSE))
-  df <- surv_to_long(dat)
-
-  # colnames(df) <- c(paste("X", 1:p, sep = ""), 'A', 'status', 'y')
+  dat$C=as.numeric(dat$C)
   return(dat)
 }
 
 
 
-data.survivl <- function(n=1000, T=10, random_seed = 42){
-  forms <- list(C ~ 1,
-                Z ~ X_l1+Z_l1+C,
-                X ~ Z_l0+C,
-                Y ~ X_l0+C,
-                ~ 1)
-  fams <- list(1, 1, 5, 1, 1) # note outcome is Gaussian
-  pars <- list(C=list(beta=0,phi=1),
-              Z=list(beta=c(-1/2,1/2,1/2,0.25),phi=0.5),
-              # X=list(beta=c(0,0.5,0.25),phi=1),
+data.survivl <- function(n=1000, T=10, random_seed = 42,  C_coeff = 0){
+  formulas <- list(C ~ 1,
+                 Z ~ X_l1 + C,
+                 X ~ Z_l0 + C,
+                 Y ~ X_l0 + C,
+                 cop ~ 1)
+  family <- list(5,1,5,3,1)
+  link <- list("logit", "identity", "logit", "inverse")
+  pars <- list(C = list(beta=0),
+              Z = list(beta = c(-1/2,1/2,0.25), phi=0.5),
               X = list(beta = c(0,1/2,1/10)),
-              Y=list(beta=c(0, 2),phi=1),
-              cop=list(beta=0.5))
-
-  
+              Y = list(beta = c(0.05,0.5,C_coeff), phi=1),
+              cop = list(beta=0.8472979))  # gives correlation 0.4
   set.seed(random_seed)
-  dat <- msm_samp(n=n, T=T, formulas = forms, family = fams, pars = pars)
-  df <- surv_to_long(dat)
-
-  # colnames(df) <- c(paste("X", 1:p, sep = ""), 'A', 'status', 'y')
+  dat <- msm_samp(n=n, T=T, formulas=formulas, family=family, pars=pars, link=link,control=list(surv=TRUE))
+  dat$C=as.numeric(dat$C)
   return(dat)
 }

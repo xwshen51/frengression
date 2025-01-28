@@ -2,6 +2,7 @@ import torch
 from engression.models import StoNet
 from engression.loss_func import energy_loss_two_sample
 import numpy as np
+import copy
 sigmoid = torch.nn.Sigmoid()
 
 # cross-fitting
@@ -146,7 +147,7 @@ class Frengression(torch.nn.Module):
         xz = torch.cat([x, z], dim=1)
         xz = xz.to(self.device)
         for i in range(num_iters):
-            #self.optimizer_y.zero_grad()
+            self.optimizer_y.zero_grad()
             eta1 = self.model_eta(xz)
             eta2 = self.model_eta(xz)
             y_sample1 = self.model_y(torch.cat([x, eta1], dim=1))
@@ -215,6 +216,7 @@ class FrengressionSeq(torch.nn.Module):
     def __init__(self, x_dim, y_dim, z_dim, T, s_dim,
                  num_layer=3, hidden_dim=100, noise_dim=10,
                  x_binary=False, z_binary=False, y_binary=False,
+                 s_in_predict=True,
                  device=torch.device('cuda')):
         super().__init__()
         self.x_dim = x_dim
@@ -228,9 +230,8 @@ class FrengressionSeq(torch.nn.Module):
         self.x_binary = x_binary
         self.z_binary = z_binary
         self.y_binary = y_binary
+        self.s_in_predict = s_in_predict
         self.device = device
-        # self.model_s = StoNet(0, s_dim, num_layer, hidden_dim, max(s_dim, noise_dim), add_bn=False, noise_all_layer=False).to(device)
-
         # for xz:
         # generate x0z0
         self.model_xz = [
@@ -246,15 +247,25 @@ class FrengressionSeq(torch.nn.Module):
        
         # for y
         # generate y0
-        self.model_y = [
-            StoNet(s_dim + x_dim + y_dim, y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act,verbose=False).to(device)
-        ]
-        # generate y1 onwards
-        for t in range(1,T):
-            self.model_y.append(
-                StoNet(x_dim * (t+1)+ y_dim, y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act,verbose=False).to(device)
-                # StoNet((x_dim+y_dim) * (t+1), y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act).to(device)
-            )
+        if self.s_in_predict:
+            self.model_y = [
+                StoNet(s_dim + x_dim + y_dim, y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act,verbose=False).to(device)
+            ]
+            # generate y1 onwards
+            for t in range(1,T):
+                self.model_y.append(
+                    StoNet(s_dim + x_dim * (t+1)+ y_dim, y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act,verbose=False).to(device)
+                    # StoNet((x_dim+y_dim) * (t+1), y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act).to(device)
+                )
+        else:
+            self.model_y = [
+                StoNet(x_dim + y_dim, y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act,verbose=False).to(device)
+            ]
+            # generate y1 onwards
+            for t in range(1,T):
+                self.model_y.append(
+                    StoNet(x_dim * (t+1)+ y_dim, y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act,verbose=False).to(device)
+                )
         
         # for eta:
         self.model_eta = [
@@ -263,7 +274,7 @@ class FrengressionSeq(torch.nn.Module):
 
         for t in range(1,T):
             self.model_eta.append(
-                StoNet(s_dim +(x_dim + z_dim)*(t + 1), y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, verbose=False).to(device)
+                StoNet(s_dim+(x_dim + z_dim)*(t + 1), y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, verbose=False).to(device)
             )
         
     
@@ -277,9 +288,9 @@ class FrengressionSeq(torch.nn.Module):
             z0 = (z0 > 0).float()
         x_all = [x0]
         z_all = [z0]
-        for t in range(1, self.T):
-            xz_p = torch.cat([x[:,:(t*self.x_dim)], z[:,:(t*self.z_dim)], y[:, :(t*self.y_dim)]], dim=1)
-            xz = self.model_xz[t](xz_p)
+        for t in range(1,self.T):
+            sxzy_p = torch.cat([s, x[:,:(t*self.x_dim)], z[:,:(t*self.z_dim)], y[:, :(t*self.y_dim)]], dim=1)
+            xz = self.model_xz[t](sxzy_p)
             xt = xz[:, :self.x_dim]
             zt = xz[:, self.x_dim:]
             if self.x_binary:
@@ -289,46 +300,40 @@ class FrengressionSeq(torch.nn.Module):
             z_all.append(zt)
         return torch.cat(x_all, dim=1), torch.cat(z_all, dim=1)
 
-    def sample_eta(self, x=None, z=None):
-        xz0 = torch.cat([x[:, :self.x_dim], z[:,:self.z_dim]], dim=1)
-        eta0 = self.model_eta[0](xz0)
-        eta_all = [eta0]
-
-        for t in range(1, self.T):
-            xz_p = torch.cat([x[:, :((t+1)*self.x_dim)], z[:,:((t+1)*self.z_dim)]], dim=1)
-            etat = self.model_eta[t](xz_p)
+    def sample_eta(self, s = None, x=None, z=None):
+        eta_all = []
+        for t in range(self.T):
+            sxz_p = torch.cat([s, x[:, :((t+1)*self.x_dim)], z[:,:((t+1)*self.z_dim)]], dim=1)
+            etat = self.model_eta[t](sxz_p)
             eta_all.append(etat)
         return torch.cat(eta_all, dim=1)
     
-    def sample_y(self, x=None, eta=None):
-        xeta0 = torch.cat([x[:,:self.x_dim], eta[:,:self.y_dim]], dim=1)
-        y0 = self.model_y[0](xeta0)
-
-        y_all = [y0]
-
-        for t in range(1, self.T):
-            # xeta_p = torch.cat([x[:,:((t+1)*self.x_dim)], eta[:, :((t+1)*self.y_dim)]], dim=1)
-            xeta_p = torch.cat([x[:,:((t+1)*self.x_dim)], eta[:, (t*self.y_dim):((t+1)*self.y_dim)]], dim=1)
-            yt = self.model_y[t](xeta_p)
+    def sample_y(self, s = None, x=None, eta=None):
+        y_all = []
+        for t in range(self.T):
+            if self.s_in_predict:
+                sxeta_p = torch.cat([s, x[:,:((t+1)*self.x_dim)], eta[:, (t*self.y_dim):((t+1)*self.y_dim)]], dim=1)
+                yt = self.model_y[t](sxeta_p)
+            else:
+                xeta_p = torch.cat([x[:,:((t+1)*self.x_dim)], eta[:, (t*self.y_dim):((t+1)*self.y_dim)]], dim=1)
+                yt = self.model_y[t](xeta_p)
             y_all.append(yt)
         return torch.cat(y_all, dim=1)
 
         
-    def train_xz(self, x, z, y, s, num_iters=100, lr=1e-3, print_every_iter=10):
+    def train_xz(self, s, x, z, y, num_iters=100, lr=1e-3, print_every_iter=10):
         for model in self.model_xz:
             model.train()
-        
         all_parameters = []
         for t in range(self.T):
             all_parameters += list(self.model_xz[t].parameters())
         self.optimizer_xz = torch.optim.Adam(all_parameters, lr=lr)
         xz = torch.cat([x, z], dim=1)
-        xz = xz.to(self.device)
         for i in range(num_iters):
             self.optimizer_xz.zero_grad()
-            sample1_x, sample1_z = self.sample_xz(s, x, z,y)
+            sample1_x, sample1_z = self.sample_xz(s=s, x=x, z=z,y=y)
             sample1 = torch.cat([sample1_x, sample1_z], dim=1)
-            sample2_x, sample2_z = self.sample_xz(s, x, z,y)
+            sample2_x, sample2_z = self.sample_xz(s=s, x=x, z=z,y=y)
             sample2 = torch.cat([sample2_x, sample2_z], dim=1)
             if self.x_binary:
                 sample1[:, :self.x_dim] = sigmoid(sample1[:, :self.x_dim])
@@ -342,7 +347,7 @@ class FrengressionSeq(torch.nn.Module):
             if (i == 0) or ((i + 1) % print_every_iter == 0):
                 print(f'Epoch {i + 1}: loss {loss.item():.4f}, loss1 {loss1.item():.4f}, loss2 {loss2.item():.4f}')
     
-    def train_y(self, x, z, y, num_iters=100, lr=1e-3, print_every_iter=10):
+    def train_y(self, s, x, z, y, num_iters=100, lr=1e-3, print_every_iter=10):
         all_parameters = []
         for t in range(self.T):
             self.model_y[t].train()
@@ -350,25 +355,22 @@ class FrengressionSeq(torch.nn.Module):
             all_parameters += list(self.model_y[t].parameters())+ list(self.model_eta[t].parameters())
 
         self.optimizer_y = torch.optim.Adam(all_parameters, lr=lr)
-
-
+        s = s.to(self.device)
         x = x.to(self.device)
         y = y.to(self.device)
         z = z.to(self.device)
-        xz = torch.cat([x, z], dim=1)
-        xz = xz.to(self.device)
         for i in range(num_iters):
             self.optimizer_y.zero_grad()
-            eta1 = self.sample_eta(x,z)
-            eta2 = self.sample_eta(x,z)
-            y_sample1 = self.sample_y(x,eta1)
-            y_sample2 = self.sample_y(x,eta2)
+            eta1 = self.sample_eta(s=s, x=x,z=z)
+            eta2 = self.sample_eta(s=s, x=x,z=z)
+            y_sample1 = self.sample_y(s=s,x=x, eta = eta1)
+            y_sample2 = self.sample_y(s=s,x=x, eta = eta2)
             loss_y, loss1_y, loss2_y = energy_loss_two_sample(y, y_sample1, y_sample2)
             
             eta_true = torch.randn(y.size(), device=self.device)
-            eta1 = self.sample_eta(x,z)
+            eta1 = self.sample_eta(s=s, x=x, z=z)
             perm = torch.randperm(x.size(0))
-            eta2 = self.sample_eta(x[perm],z[perm])
+            eta2 = self.sample_eta(s=s[perm], x=x[perm],z=z[perm])
             loss_eta, loss1_eta, loss2_eta = energy_loss_two_sample(eta_true, eta1, eta2)
             loss = loss_y + loss_eta
             loss.backward()
@@ -376,41 +378,31 @@ class FrengressionSeq(torch.nn.Module):
             if (i == 0) or ((i + 1) % print_every_iter == 0):
                 print(f'Epoch {i + 1}: loss {loss.item():.4f},\tloss_y {loss_y.item():.4f}, {loss1_y.item():.4f}, {loss2_y.item():.4f},\tloss_eta {loss_eta.item():.4f}, {loss1_eta.item():.4f}, {loss2_eta.item():.4f}')
     
-
-
     @torch.no_grad()
-    def predict_causal(self, x, target="mean", sample_size=100):
+    def predict_causal(self, s, x, target="mean", sample_size=100):
         self.eval()
         x = x.to(self.device)
-        all_y=[]
-        for t in range(self.T):
-            yt = self.model_y[t].predict(x[:,:(t+1)*self.x_dim], target, sample_size)
-            all_y.append(yt)
-        return all_y
-        
-    @torch.no_grad()
-    def sample_joint(self, s_new,sample_size=100): #???
-        self.eval()
-        
-        xz = self.model_xz(s_new)
-        eta = self.model_eta(xz)
-        x = xz[:, :self.x_dim]
-        z = xz[:, self.x_dim:]
-        if self.x_binary:
-            x = (x < 0).float()
-        if self.z_binary:
-            z = (z < 0).float()
-        y = self.model_y(torch.cat([x, eta], dim=1))
-        return x, y, z
-
-    
-    @torch.no_grad()
-    def sample_causal_margin(self, x, sample_size=100):
-        self.eval()
-        x = x.to(self.device)
+        s = s.to(self.device)
         all_y = []
         for t in range(self.T):
-            yt = self.model_y[t].sample(x[:,:(t+1)*self.x_dim], sample_size = sample_size)
+            if self.s_in_predict:
+                yt = self.model_y[t].predict(torch.cat([s,x[:,:(t+1)*self.x_dim]],dim=1), target, sample_size)
+            else:
+                yt = self.model_y[t].predict(x[:,:(t+1)*self.x_dim], target, sample_size)
+            all_y.append(yt)
+        return all_y
+    
+    @torch.no_grad()
+    def sample_causal_margin(self,s, x, sample_size=100):
+        self.eval()
+        x = x.to(self.device)
+        s = s.to(self.device)
+        all_y = []
+        for t in range(self.T):
+            if self.s_in_predict:
+                yt = self.model_y[t].sample(torch.cat([s,x[:,:(t+1)*self.x_dim]], dim=1), sample_size = sample_size)
+            else:
+                yt = self.model_y[t].sample(x[:,:(t+1)*self.x_dim], sample_size = sample_size)
             all_y.append(yt)
         return all_y
 
@@ -419,7 +411,8 @@ class FrengressionSeq(torch.nn.Module):
 class FrengressionSurv(torch.nn.Module):
     def __init__(self, x_dim, y_dim, z_dim, T, s_dim,
                  num_layer=3, hidden_dim=100, noise_dim=10,
-                 x_binary=False, z_binary=False, y_binary=False,
+                 x_binary=False, z_binary=False, y_binary=True,
+                 s_in_predict = True,
                  device=torch.device('cuda')):
         super().__init__()
         self.x_dim = x_dim
@@ -432,10 +425,8 @@ class FrengressionSurv(torch.nn.Module):
         self.noise_dim = noise_dim
         self.x_binary = x_binary
         self.z_binary = z_binary
-        self.y_binary = y_binary
+        self.y_binary = y_binary # Default setting of survivl data : binary outcome
         self.device = device
-        # self.model_s = StoNet(0, s_dim, num_layer, hidden_dim, max(s_dim, noise_dim), add_bn=False, noise_all_layer=False).to(device)
-
         # for xz:
         # generate x0z0
         self.model_xz = [
@@ -451,15 +442,25 @@ class FrengressionSurv(torch.nn.Module):
        
         # for y
         # generate y0
-        self.model_y = [
-            StoNet(s_dim + x_dim + y_dim, y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act,verbose=False).to(device)
-        ]
-        # generate y1 onwards
-        for t in range(1,T):
-            self.model_y.append(
-                StoNet(x_dim * (t+1)+ y_dim, y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act,verbose=False).to(device)
-                # StoNet((x_dim+y_dim) * (t+1), y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act).to(device)
-            )
+        if self.s_in_predict:
+            self.model_y = [
+                StoNet(s_dim + x_dim + y_dim, y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act,verbose=False).to(device)
+            ]
+            # generate y1 onwards
+            for t in range(1,T):
+                self.model_y.append(
+                    StoNet(s_dim + x_dim * (t+1)+ y_dim, y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act,verbose=False).to(device)
+                    # StoNet((x_dim+y_dim) * (t+1), y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act).to(device)
+                )
+        else:
+            self.model_y = [
+                StoNet(x_dim + y_dim, y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act,verbose=False).to(device)
+            ]
+            # generate y1 onwards
+            for t in range(1,T):
+                self.model_y.append(
+                    StoNet(x_dim * (t+1)+ y_dim, y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act,verbose=False).to(device)
+                )
         
         # for eta:
         self.model_eta = [
@@ -468,7 +469,7 @@ class FrengressionSurv(torch.nn.Module):
 
         for t in range(1,T):
             self.model_eta.append(
-                StoNet(s_dim +(x_dim + z_dim)*(t + 1), y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, verbose=False).to(device)
+                StoNet(s_dim+(x_dim + z_dim)*(t + 1), y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, verbose=False).to(device)
             )
         
     
@@ -482,9 +483,9 @@ class FrengressionSurv(torch.nn.Module):
             z0 = (z0 > 0).float()
         x_all = [x0]
         z_all = [z0]
-        for t in range(1, self.T):
-            xz_p = torch.cat([x[:,:(t*self.x_dim)], z[:,:(t*self.z_dim)], y[:, :(t*self.y_dim)]], dim=1)
-            xz = self.model_xz[t](xz_p)
+        for t in range(1,self.T):
+            sxzy_p = torch.cat([s, x[:,:(t*self.x_dim)], z[:,:(t*self.z_dim)], y[:, :(t*self.y_dim)]], dim=1)
+            xz = self.model_xz[t](sxzy_p)
             xt = xz[:, :self.x_dim]
             zt = xz[:, self.x_dim:]
             if self.x_binary:
@@ -492,48 +493,44 @@ class FrengressionSurv(torch.nn.Module):
                 zt = (zt > 0).float()
             x_all.append(xt)
             z_all.append(zt)
+        
+
         return torch.cat(x_all, dim=1), torch.cat(z_all, dim=1)
 
-    def sample_eta(self, x=None, z=None):
-        xz0 = torch.cat([x[:, :self.x_dim], z[:,:self.z_dim]], dim=1)
-        eta0 = self.model_eta[0](xz0)
-        eta_all = [eta0]
-
-        for t in range(1, self.T):
-            xz_p = torch.cat([x[:, :((t+1)*self.x_dim)], z[:,:((t+1)*self.z_dim)]], dim=1)
-            etat = self.model_eta[t](xz_p)
+    def sample_eta(self, s = None, x=None, z=None):
+        eta_all = []
+        for t in range(self.T):
+            sxz_p = torch.cat([s, x[:, :((t+1)*self.x_dim)], z[:,:((t+1)*self.z_dim)]], dim=1)
+            etat = self.model_eta[t](sxz_p)
             eta_all.append(etat)
         return torch.cat(eta_all, dim=1)
     
-    def sample_y(self, x=None, eta=None):
-        xeta0 = torch.cat([x[:,:self.x_dim], eta[:,:self.y_dim]], dim=1)
-        y0 = self.model_y[0](xeta0)
-
-        y_all = [y0]
-
-        for t in range(1, self.T):
-            # xeta_p = torch.cat([x[:,:((t+1)*self.x_dim)], eta[:, :((t+1)*self.y_dim)]], dim=1)
-            xeta_p = torch.cat([x[:,:((t+1)*self.x_dim)], eta[:, (t*self.y_dim):((t+1)*self.y_dim)]], dim=1)
-            yt = self.model_y[t](xeta_p)
+    def sample_y(self, s = None, x=None, eta=None):
+        y_all = []
+        for t in range(self.T):
+            if self.s_in_predict:
+                sxeta_p = torch.cat([s, x[:,:((t+1)*self.x_dim)], eta[:, (t*self.y_dim):((t+1)*self.y_dim)]], dim=1)
+                yt = self.model_y[t](sxeta_p)
+            else:
+                xeta_p = torch.cat([x[:,:((t+1)*self.x_dim)], eta[:, (t*self.y_dim):((t+1)*self.y_dim)]], dim=1)
+                yt = self.model_y[t](xeta_p)
             y_all.append(yt)
         return torch.cat(y_all, dim=1)
 
         
-    def train_xz(self, x, z, y, s, num_iters=100, lr=1e-3, print_every_iter=10):
+    def train_xz(self, s, x, z, y, num_iters=100, lr=1e-3, print_every_iter=10):
         for model in self.model_xz:
             model.train()
-        
         all_parameters = []
         for t in range(self.T):
             all_parameters += list(self.model_xz[t].parameters())
         self.optimizer_xz = torch.optim.Adam(all_parameters, lr=lr)
         xz = torch.cat([x, z], dim=1)
-        xz = xz.to(self.device)
         for i in range(num_iters):
             self.optimizer_xz.zero_grad()
-            sample1_x, sample1_z = self.sample_xz(s, x, z,y)
+            sample1_x, sample1_z = self.sample_xz(s=s, x=x, z=z,y=y)
             sample1 = torch.cat([sample1_x, sample1_z], dim=1)
-            sample2_x, sample2_z = self.sample_xz(s, x, z,y)
+            sample2_x, sample2_z = self.sample_xz(s=s, x=x, z=z,y=y)
             sample2 = torch.cat([sample2_x, sample2_z], dim=1)
             if self.x_binary:
                 sample1[:, :self.x_dim] = sigmoid(sample1[:, :self.x_dim])
@@ -547,7 +544,7 @@ class FrengressionSurv(torch.nn.Module):
             if (i == 0) or ((i + 1) % print_every_iter == 0):
                 print(f'Epoch {i + 1}: loss {loss.item():.4f}, loss1 {loss1.item():.4f}, loss2 {loss2.item():.4f}')
     
-    def train_y(self, x, z, y, num_iters=100, lr=1e-3, print_every_iter=10):
+    def train_y(self, s, x, z, y, num_iters=100, lr=1e-3, print_every_iter=10):
         all_parameters = []
         for t in range(self.T):
             self.model_y[t].train()
@@ -555,25 +552,41 @@ class FrengressionSurv(torch.nn.Module):
             all_parameters += list(self.model_y[t].parameters())+ list(self.model_eta[t].parameters())
 
         self.optimizer_y = torch.optim.Adam(all_parameters, lr=lr)
-
-
+        s = s.to(self.device)
         x = x.to(self.device)
         y = y.to(self.device)
         z = z.to(self.device)
-        xz = torch.cat([x, z], dim=1)
-        xz = xz.to(self.device)
+        for t in range(self.T):
+            valid_idx = (y[:,t] <1).float()
+        event_indicator = (y>0).float()
+        c = torch.cumsum(event_indicator, dim=1)
+        c_shifted = torch.zeros_like(c)
+        c_shifted[:, 1:] = c[:, :-1]
+        mask = (c_shifted > 0)
+        y_masked = copy.deepcopy(y)
+        y_masked[mask] = -1
         for i in range(num_iters):
             self.optimizer_y.zero_grad()
-            eta1 = self.sample_eta(x,z)
-            eta2 = self.sample_eta(x,z)
-            y_sample1 = self.sample_y(x,eta1)
-            y_sample2 = self.sample_y(x,eta2)
-            loss_y, loss1_y, loss2_y = energy_loss_two_sample(y, y_sample1, y_sample2)
+            eta1 = self.sample_eta(s=s, x=x,z=z)
+            eta2 = self.sample_eta(s=s, x=x,z=z)
+            y_sample1 = self.sample_y(s=s,x=x, eta = eta1)
+            y_sample2 = self.sample_y(s=s,x=x, eta = eta2)
+            y_sample1[mask] = -1
+            y_sample2[mask] = -1           
+
+            loss_y, loss1_y, loss2_y = energy_loss_two_sample(y_masked, y_sample1, y_sample2)
             
             eta_true = torch.randn(y.size(), device=self.device)
-            eta1 = self.sample_eta(x,z)
+
+            eta1 = self.sample_eta(s=s, x=x, z=z)
             perm = torch.randperm(x.size(0))
-            eta2 = self.sample_eta(x[perm],z[perm])
+            # eta2 = self.sample_eta(s=s[perm], x=x[perm],z=z[perm])
+            eta2 = self.sample_eta(s=s, x=x, z=z)
+
+            # eta_true[mask] = -1
+            # eta1[mask] = -1
+            # eta2[mask] = -1
+
             loss_eta, loss1_eta, loss2_eta = energy_loss_two_sample(eta_true, eta1, eta2)
             loss = loss_y + loss_eta
             loss.backward()
@@ -581,40 +594,29 @@ class FrengressionSurv(torch.nn.Module):
             if (i == 0) or ((i + 1) % print_every_iter == 0):
                 print(f'Epoch {i + 1}: loss {loss.item():.4f},\tloss_y {loss_y.item():.4f}, {loss1_y.item():.4f}, {loss2_y.item():.4f},\tloss_eta {loss_eta.item():.4f}, {loss1_eta.item():.4f}, {loss2_eta.item():.4f}')
     
-
-
     @torch.no_grad()
-    def predict_causal(self, x, target="mean", sample_size=100):
+    def predict_causal(self, s, x, target="mean", sample_size=100):
         self.eval()
         x = x.to(self.device)
-        all_y=[]
-        for t in range(self.T):
-            yt = self.model_y[t].predict(x[:,:(t+1)*self.x_dim], target, sample_size)
-            all_y.append(yt)
-        return all_y
-        
-    @torch.no_grad()
-    def sample_joint(self, s_new,sample_size=100): #???
-        self.eval()
-        
-        xz = self.model_xz(s_new)
-        eta = self.model_eta(xz)
-        x = xz[:, :self.x_dim]
-        z = xz[:, self.x_dim:]
-        if self.x_binary:
-            x = (x < 0).float()
-        if self.z_binary:
-            z = (z < 0).float()
-        y = self.model_y(torch.cat([x, eta], dim=1))
-        return x, y, z
-
-    
-    @torch.no_grad()
-    def sample_causal_margin(self, x, sample_size=100):
-        self.eval()
-        x = x.to(self.device)
+        s = s.to(self.device)
         all_y = []
         for t in range(self.T):
-            yt = self.model_y[t].sample(x[:,:(t+1)*self.x_dim], sample_size = sample_size)
+            if self.s_in_predict:
+                yt = self.model_y[t].predict(torch.cat([s,x[:,:(t+1)*self.x_dim]],dim=1), target, sample_size)
+            else:
+                yt = self.model_y[t].predict(x[:,:(t+1)*self.x_dim], target, sample_size)
+        return all_y
+    
+    @torch.no_grad()
+    def sample_causal_margin(self,s, x, sample_size=100):
+        self.eval()
+        x = x.to(self.device)
+        s = s.to(self.device)
+        all_y = []
+        for t in range(self.T):
+            if self.s_in_predict:
+                yt = self.model_y[t].sample(torch.cat([s,x[:,:(t+1)*self.x_dim]], dim=1), sample_size = sample_size)
+            else:
+                yt = self.model_y[t].sample(x[:,:(t+1)*self.x_dim], sample_size = sample_size)
             all_y.append(yt)
         return all_y

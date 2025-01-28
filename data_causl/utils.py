@@ -49,13 +49,13 @@ def generate_data_causl(n=10000, nI = 3, nX= 1, nO = 1, nS = 1, ate = 2, beta_co
         df = robjects.conversion.rpy2py(r_dataframe)
     return df
 
-def generate_data_longitudinl(n=10000, T=10, random_seed=1024):
+def generate_data_longitudinl(n=10000, T=10, random_seed=1024, C_coeff=0):
     pandas2ri.activate()
     # Source the ./data.r script for data.causl dgp function
     with suppress_r_output():
         robjects.r['source'](r'data_causl/data_causl.R')
         generate_data_longitudinl = robjects.globalenv['data.longitudinl']
-        r_dataframe = generate_data_longitudinl(n=n, T=T, random_seed=random_seed)
+        r_dataframe = generate_data_longitudinl(n=n, T=T, random_seed=random_seed, C_coeff=C_coeff)
     # Use the localconverter context manager to convert the R dataframe to a Pandas DataFrame
     with localconverter(robjects.default_converter + pandas2ri.converter):
         df = robjects.conversion.rpy2py(r_dataframe)
@@ -91,6 +91,50 @@ def generate_data_longitudinl(n=10000, T=10, random_seed=1024):
     y_array = np.concatenate(y_list, axis=1)  # Shape: [n, T * y_dim]
 
     return s, x_array, z_array, y_array
+
+def generate_data_survivl(n=10000, T=10, random_seed=1024, C_coeff=0):
+    pandas2ri.activate()
+    # Source the ./data.r script for data.causl dgp function
+    with suppress_r_output():
+        robjects.r['source'](r'data_causl/data_causl.R')
+        generate_data_survivl = robjects.globalenv['data.survivl']
+        r_dataframe = generate_data_survivl(n=n, T=T, random_seed=random_seed, C_coeff=C_coeff)
+    # Use the localconverter context manager to convert the R dataframe to a Pandas DataFrame
+    with localconverter(robjects.default_converter + pandas2ri.converter):
+        df = robjects.conversion.rpy2py(r_dataframe)
+    # Drop non-feature columns
+    columns_to_drop = ['id', 'status', 'T']
+    df = df.drop(columns=[col for col in columns_to_drop if col in df.columns])
+
+    time_steps = T 
+    # Extract baseline  covariates (s)
+    s_cols = ['C']
+    s = df[s_cols].values  # Shape: (n, s_dim)
+
+    # Initialize lists to hold x, z, y for all time steps
+    x_list = []
+    z_list = []
+    y_list = []
+
+    for t in range(time_steps):
+        x_col = f"X_{t}"
+        z_col = f"Z_{t}"
+        y_col = f"Y_{t}"
+
+        if x_col not in df.columns or z_col not in df.columns or y_col not in df.columns:
+            raise ValueError(f"Expected columns {x_col}, {z_col}, {y_col} not found in the dataframe.")
+
+        x_list.append(df[x_col].values.reshape(-1, 1))  # Assuming x_dim=1
+        z_list.append(df[z_col].values.reshape(-1, 1))  # Assuming z_dim=1
+        y_list.append(df[y_col].values.reshape(-1, 1))  # Assuming y_dim=1
+
+    # Concatenate along the second dimension to form [n, T * x_dim], etc.
+    x_array = np.concatenate(x_list, axis=1)  # Shape: [n, T * x_dim]
+    z_array = np.concatenate(z_list, axis=1)  # Shape: [n, T * z_dim]
+    y_array = np.concatenate(y_list, axis=1)  # Shape: [n, T * y_dim]
+
+    return s, x_array, z_array, y_array
+
 
 
 def dr_ate(x_tr,y_tr,z_tr, x_te, y_te, z_te, ps_model = "lr", or_model = "rf",random_state = 42):
