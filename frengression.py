@@ -427,6 +427,7 @@ class FrengressionSurv(torch.nn.Module):
         self.z_binary = z_binary
         self.y_binary = y_binary # Default setting of survivl data : binary outcome
         self.device = device
+        self.s_in_predict=s_in_predict
         # for xz:
         # generate x0z0
         self.model_xz = [
@@ -497,25 +498,25 @@ class FrengressionSurv(torch.nn.Module):
 
         return torch.cat(x_all, dim=1), torch.cat(z_all, dim=1)
 
-    def sample_eta(self, s = None, x=None, z=None):
-        eta_all = []
-        for t in range(self.T):
-            sxz_p = torch.cat([s, x[:, :((t+1)*self.x_dim)], z[:,:((t+1)*self.z_dim)]], dim=1)
-            etat = self.model_eta[t](sxz_p)
-            eta_all.append(etat)
-        return torch.cat(eta_all, dim=1)
+    # def sample_eta(self, s = None, x=None, z=None):
+    #     eta_all = []
+    #     for t in range(self.T):
+    #         sxz_p = torch.cat([s, x[:, :((t+1)*self.x_dim)], z[:,:((t+1)*self.z_dim)]], dim=1)
+    #         etat = self.model_eta[t](sxz_p)
+    #         eta_all.append(etat)
+    #     return torch.cat(eta_all, dim=1)
     
-    def sample_y(self, s = None, x=None, eta=None):
-        y_all = []
-        for t in range(self.T):
-            if self.s_in_predict:
-                sxeta_p = torch.cat([s, x[:,:((t+1)*self.x_dim)], eta[:, (t*self.y_dim):((t+1)*self.y_dim)]], dim=1)
-                yt = self.model_y[t](sxeta_p)
-            else:
-                xeta_p = torch.cat([x[:,:((t+1)*self.x_dim)], eta[:, (t*self.y_dim):((t+1)*self.y_dim)]], dim=1)
-                yt = self.model_y[t](xeta_p)
-            y_all.append(yt)
-        return torch.cat(y_all, dim=1)
+    # def sample_y(self, s = None, x=None, eta=None):
+    #     y_all = []
+    #     for t in range(self.T):
+    #         if self.s_in_predict:
+    #             sxeta_p = torch.cat([s, x[:,:((t+1)*self.x_dim)], eta[:, (t*self.y_dim):((t+1)*self.y_dim)]], dim=1)
+    #             yt = self.model_y[t](sxeta_p)
+    #         else:
+    #             xeta_p = torch.cat([x[:,:((t+1)*self.x_dim)], eta[:, (t*self.y_dim):((t+1)*self.y_dim)]], dim=1)
+    #             yt = self.model_y[t](xeta_p)
+    #         y_all.append(yt)
+    #     return torch.cat(y_all, dim=1)
 
         
     def train_xz(self, s, x, z, y, num_iters=100, lr=1e-3, print_every_iter=10):
@@ -556,8 +557,8 @@ class FrengressionSurv(torch.nn.Module):
         x = x.to(self.device)
         y = y.to(self.device)
         z = z.to(self.device)
-        for t in range(self.T):
-            valid_idx = (y[:,t] <1).float()
+
+        n = x.shape[0]
         event_indicator = (y>0).float()
         c = torch.cumsum(event_indicator, dim=1)
         c_shifted = torch.zeros_like(c)
@@ -565,29 +566,65 @@ class FrengressionSurv(torch.nn.Module):
         mask = (c_shifted > 0)
         y_masked = copy.deepcopy(y)
         y_masked[mask] = -1
+
+        y_list = [y[:,:self.y_dim]]
+        x_list = [x[:,:self.x_dim]]
+        s_list = [s[:,:self.s_dim]]
+        z_list = [z[:,:self.z_dim]]
+
+        # resample from data
+        for t in range(1, self.T):
+            valid_idx = (y_masked[:,t] >=0).nonzero(as_tuple=True)[0]
+            sample_idx = valid_idx[torch.randint(0, len(valid_idx), (n,))]
+            y_list.append(y[sample_idx, t*self.y_dim:((t+1)*self.y_dim)])
+            x_list.append(x[sample_idx, :((t+1)*self.x_dim)])
+            z_list.append(z[sample_idx, :((t+1)*self.z_dim)])
+            s_list.append(s[sample_idx, :self.s_dim])
+        y_sample = torch.cat(y_list, dim=1)
+
+        
         for i in range(num_iters):
             self.optimizer_y.zero_grad()
-            eta1 = self.sample_eta(s=s, x=x,z=z)
-            eta2 = self.sample_eta(s=s, x=x,z=z)
-            y_sample1 = self.sample_y(s=s,x=x, eta = eta1)
-            y_sample2 = self.sample_y(s=s,x=x, eta = eta2)
-            y_sample1[mask] = -1
-            y_sample2[mask] = -1           
+            y_sample1 = []
+            y_sample2 = []
+            for t in range(self.T):
+                sxz_p = torch.cat([s_list[t], x_list[t], z_list[t]], dim=1)
+                etat1 = self.model_eta[t](sxz_p)
+                etat2 = self.model_eta[t](sxz_p)
+                if self.s_in_predict:
+                    sxeta_p1 = torch.cat([s_list[t], x_list[t], etat1], dim=1)
+                    yt1 = self.model_y[t](sxeta_p1)
+                    sxeta_p2 = torch.cat([s_list[t], x_list[t], etat2], dim=1)
+                    yt2 = self.model_y[t](sxeta_p2)
+                else:
+                    xeta_p1 = torch.cat([x_list[t], etat1], dim=1)
+                    xeta_p2 = torch.cat([x_list[t], etat2], dim=1)
+                    yt1 = self.model_y[t](xeta_p1)
+                    yt2 = self.model_y[t](xeta_p2)
+                y_sample1.append(yt1)
+                y_sample2.append(yt2)
 
-            loss_y, loss1_y, loss2_y = energy_loss_two_sample(y_masked, y_sample1, y_sample2)
+            y_sample1_cat = torch.cat(y_sample1,dim=1)
+            y_sample2_cat = torch.cat(y_sample2,dim=1)
+            loss_y, loss1_y, loss2_y = energy_loss_two_sample(y_sample, y_sample1_cat, y_sample2_cat)
             
             eta_true = torch.randn(y.size(), device=self.device)
 
-            eta1 = self.sample_eta(s=s, x=x, z=z)
+            eta1 = []
+            eta2 = []
             perm = torch.randperm(x.size(0))
-            # eta2 = self.sample_eta(s=s[perm], x=x[perm],z=z[perm])
-            eta2 = self.sample_eta(s=s, x=x, z=z)
+            for t in range(self.T):
+                sxz_p1 = torch.cat([s_list[t], x_list[t], z_list[t]], dim=1)
+                sxz_p2 = torch.cat([s_list[t][perm], x_list[t][perm], z_list[t][perm]], dim=1)
+                etat1 = self.model_eta[t](sxz_p1)
+                etat2 = self.model_eta[t](sxz_p2)
+ 
+                eta1.append(etat1)
+                eta2.append(etat2)
+            eta1_cat = torch.cat(eta1,dim=1)
+            eta2_cat = torch.cat(eta2,dim=1)
 
-            # eta_true[mask] = -1
-            # eta1[mask] = -1
-            # eta2[mask] = -1
-
-            loss_eta, loss1_eta, loss2_eta = energy_loss_two_sample(eta_true, eta1, eta2)
+            loss_eta, loss1_eta, loss2_eta = energy_loss_two_sample(eta_true, eta1_cat, eta2_cat)
             loss = loss_y + loss_eta
             loss.backward()
             self.optimizer_y.step()
