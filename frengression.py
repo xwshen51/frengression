@@ -498,26 +498,6 @@ class FrengressionSurv(torch.nn.Module):
 
         return torch.cat(x_all, dim=1), torch.cat(z_all, dim=1)
 
-    # def sample_eta(self, s = None, x=None, z=None):
-    #     eta_all = []
-    #     for t in range(self.T):
-    #         sxz_p = torch.cat([s, x[:, :((t+1)*self.x_dim)], z[:,:((t+1)*self.z_dim)]], dim=1)
-    #         etat = self.model_eta[t](sxz_p)
-    #         eta_all.append(etat)
-    #     return torch.cat(eta_all, dim=1)
-    
-    # def sample_y(self, s = None, x=None, eta=None):
-    #     y_all = []
-    #     for t in range(self.T):
-    #         if self.s_in_predict:
-    #             sxeta_p = torch.cat([s, x[:,:((t+1)*self.x_dim)], eta[:, (t*self.y_dim):((t+1)*self.y_dim)]], dim=1)
-    #             yt = self.model_y[t](sxeta_p)
-    #         else:
-    #             xeta_p = torch.cat([x[:,:((t+1)*self.x_dim)], eta[:, (t*self.y_dim):((t+1)*self.y_dim)]], dim=1)
-    #             yt = self.model_y[t](xeta_p)
-    #         y_all.append(yt)
-    #     return torch.cat(y_all, dim=1)
-
         
     def train_xz(self, s, x, z, y, num_iters=100, lr=1e-3, print_every_iter=10):
         for model in self.model_xz:
@@ -631,18 +611,6 @@ class FrengressionSurv(torch.nn.Module):
             if (i == 0) or ((i + 1) % print_every_iter == 0):
                 print(f'Epoch {i + 1}: loss {loss.item():.4f},\tloss_y {loss_y.item():.4f}, {loss1_y.item():.4f}, {loss2_y.item():.4f},\tloss_eta {loss_eta.item():.4f}, {loss1_eta.item():.4f}, {loss2_eta.item():.4f}')
     
-    @torch.no_grad()
-    def predict_causal(self, s, x, target="mean", sample_size=100):
-        self.eval()
-        x = x.to(self.device)
-        s = s.to(self.device)
-        all_y = []
-        for t in range(self.T):
-            if self.s_in_predict:
-                yt = self.model_y[t].predict(torch.cat([s,x[:,:(t+1)*self.x_dim]],dim=1), target, sample_size)
-            else:
-                yt = self.model_y[t].predict(x[:,:(t+1)*self.x_dim], target, sample_size)
-        return all_y
     
     @torch.no_grad()
     def sample_causal_margin(self,s, x, sample_size=100):
@@ -652,8 +620,17 @@ class FrengressionSurv(torch.nn.Module):
         all_y = []
         for t in range(self.T):
             if self.s_in_predict:
-                yt = self.model_y[t].sample(torch.cat([s,x[:,:(t+1)*self.x_dim]], dim=1), sample_size = sample_size)
+                yt = ((self.model_y[t].sample(torch.cat([s,x[:,:(t+1)*self.x_dim]], dim=1), sample_size = sample_size))>0.5).float()
             else:
-                yt = self.model_y[t].sample(x[:,:(t+1)*self.x_dim], sample_size = sample_size)
+                yt = ((self.model_y[t].sample(x[:,:(t+1)*self.x_dim], sample_size = sample_size))>0.5).float()
             all_y.append(yt)
-        return all_y
+
+        return torch.cat(all_y,dim=1).squeeze(0).permute(1, 0)
+   
+    @torch.no_grad()
+    def predict_causal(self, s, x, sample_size=100):
+        y_causal_margin = self.sample_causal_margin(s, x, sample_size)
+        event_indicator = (y_causal_margin>0).float()
+        
+        return event_indicator
+        
