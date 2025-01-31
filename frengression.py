@@ -544,26 +544,25 @@ class FrengressionSurv(torch.nn.Module):
         c_shifted = torch.zeros_like(c)
         c_shifted[:, 1:] = c[:, :-1]
         mask = (c_shifted > 0)
-        y_masked = copy.deepcopy(y)
+        y_masked = y.clone()
         y_masked[mask] = -1
-
-        y_list = [y[:,:self.y_dim]]
-        x_list = [x[:,:self.x_dim]]
-        s_list = [s[:,:self.s_dim]]
-        z_list = [z[:,:self.z_dim]]
-
-        # resample from data
-        for t in range(1, self.T):
-            valid_idx = (y_masked[:,t] >=0).nonzero(as_tuple=True)[0]
-            sample_idx = valid_idx[torch.randint(0, len(valid_idx), (n,))]
-            y_list.append(y[sample_idx, t*self.y_dim:((t+1)*self.y_dim)])
-            x_list.append(x[sample_idx, :((t+1)*self.x_dim)])
-            z_list.append(z[sample_idx, :((t+1)*self.z_dim)])
-            s_list.append(s[sample_idx, :self.s_dim])
-        y_sample = torch.cat(y_list, dim=1)
-
         
         for i in range(num_iters):
+            y_list = [y[:,:self.y_dim]]
+            x_list = [x[:,:self.x_dim]]
+            s_list = [s[:,:self.s_dim]]
+            z_list = [z[:,:self.z_dim]]
+
+            # resample from data
+            for t in range(1, self.T):
+                valid_idx = (y_masked[:,t] >=-0.5).nonzero(as_tuple=True)[0]
+                sample_idx = valid_idx[torch.randint(0, len(valid_idx), (n,))]
+                y_list.append(y[sample_idx, t*self.y_dim:((t+1)*self.y_dim)])
+                x_list.append(x[sample_idx, :((t+1)*self.x_dim)])
+                z_list.append(z[sample_idx, :((t+1)*self.z_dim)])
+                s_list.append(s[sample_idx, :self.s_dim])
+            y_sample = torch.cat(y_list, dim=1)
+
             self.optimizer_y.zero_grad()
             y_sample1 = []
             y_sample2 = []
@@ -620,7 +619,7 @@ class FrengressionSurv(torch.nn.Module):
         all_y = []
         for t in range(self.T):
             if self.s_in_predict:
-                yt = ((self.model_y[t].sample(torch.cat([s,x[:,:(t+1)*self.x_dim]], dim=1), sample_size = sample_size))>0.5).float()
+                yt = ((self.model_y[t].sample(torch.cat([s,x[:,:(t+1)*self.x_dim]], dim=1), sample_size = sample_size))>0.6).float()
             else:
                 yt = ((self.model_y[t].sample(x[:,:(t+1)*self.x_dim], sample_size = sample_size))>0.5).float()
             all_y.append(yt)

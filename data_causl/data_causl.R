@@ -180,10 +180,11 @@ data.longitudinl <- function(n=1000, T=10, random_seed = 42, C_coeff = 0){
                 Y ~ X_l0+C,
                 ~ 1)
   fams <- list(1, 1, 5, 1, 1) # note outcome is Gaussian
+  # fams <- list(1, 1, 1, 1, 1) # note outcome is Gaussian
   pars <- list(C=list(beta=0,phi=1),
               Z=list(beta=c(-1/2,1/2,1/2,0.25),phi=0.5),
               # X=list(beta=c(0,0.5,0.25),phi=1),
-              X = list(beta = c(0,1/2,1/10)),
+              X = list(beta = c(0,1/2,1/10), phi=1),
               Y=list(beta=c(0, 2, C_coeff),phi=1),
               cop=list(beta=0.5))
 
@@ -206,8 +207,37 @@ data.survivl <- function(n=1000, T=10, random_seed = 42,  C_coeff = 0){
   pars <- list(C = list(beta=0),
               Z = list(beta = c(-1/2,1/2,0.25), phi=0.5),
               X = list(beta = c(0,1/2,1/10)),
-              Y = list(beta = c(0.05,0.5,C_coeff), phi=1),
+              Y = list(beta = c(0.3,0.5,C_coeff), phi=1),
               cop = list(beta=0.8472979))  # gives correlation 0.4
+  # formulas <- list(C ~ 1,
+  #             Z ~ Z_l1 + X_l1,
+  #             X ~ X_l1 + Z_l0,
+  #             Y ~ C + X_l0,
+  #             list(Y = list(Z ~ C)))
+  # family <- list(3, 1, 5, 3, c(1))
+  # link <- list("log", "identity", "logit", "inverse")
+  # pars <- list(C = list(beta=0, phi=1/2),
+  #             Z = list(beta=c(0,0.7,0.2), phi=1),
+  #             X = list(beta=c(-0.5,0.25,0.5)), 
+  #             # Y = list(beta=c(1,-1/10,1/5), phi=1),
+  #             Y = list(beta=c(0.5,1/5,1/5), phi=1),
+  #             cop = list(Y=list(Z=list(beta=c(0.5, 0.0))))
+  #             )
+  # formulas <- list(C ~ 1,
+  #                Z ~ X_l1 + C,
+  #                X ~ Z_l0 + C,
+  #                Y ~ X_l0 + C,
+  #                # Y ~ 1,
+  #                cop ~ 1)
+  # family <- list(5,1,1,3,1)
+  # link <- list("logit", "identity", "identity", "inverse")
+  # pars <- list(C = list(beta=0),
+  #             Z = list(beta = c(-1/2,1/2,0.25), phi=0.5),
+  #             X = list(beta = c(1.2,0.1,2),phi=0.1),
+  #             Y = list(beta = c(0.05,0.3,0.1), phi=1),
+  #             # Y = list(beta = c(0.05), phi=1),
+  #             cop = list(beta=0.8472979))  # gives correlation 0.4
+
   set.seed(random_seed)
   dat <- msm_samp(n=n, T=T, formulas=formulas, family=family, pars=pars, link=link,control=list(surv=TRUE))
   dat$C=as.numeric(dat$C)
