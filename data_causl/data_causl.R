@@ -252,7 +252,7 @@ data.survivl <- function(n=1000, T=10, random_seed = 42,  C_coeff = 0, setting =
     pars <- list(C = list(beta=0),
                 Z = list(beta = c(-1/2,1/2,0.25), phi=0.5),
                 X = list(beta = c(1.2,0.1,2),phi=0.1),
-                Y = list(beta = c(0.05,0.3,0.1), phi=1),
+                Y = list(beta = c(0.1,0.3,0.1), phi=1),
                 # Y = list(beta = c(0.05), phi=1),
                 cop = list(beta=0.8472979))  # gives correlation 0.4
   }
