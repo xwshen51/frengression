@@ -539,28 +539,58 @@ class FrengressionSurv(torch.nn.Module):
         z = z.to(self.device)
 
         n = x.shape[0]
-        event_indicator = (y>0).float()
-        c = torch.cumsum(event_indicator, dim=1)
-        c_shifted = torch.zeros_like(c)
-        c_shifted[:, 1:] = c[:, :-1]
-        mask = (c_shifted > 0)
-        y_masked = y.clone()
-        y_masked[mask] = -1
+
         
         for i in range(num_iters):
-            y_list = [y[:,:self.y_dim]]
-            x_list = [x[:,:self.x_dim]]
-            s_list = [s[:,:self.s_dim]]
-            z_list = [z[:,:self.z_dim]]
+            event_indicator = (y>0).float()
+            c = torch.cumsum(event_indicator, dim=1)
+            c_shifted = torch.zeros_like(c)
+            c_shifted[:, 1:] = c[:, :-1]
+            mask = (c_shifted > 0)
+            y_masked = y.clone()
+            y_masked[mask] = -1
+
+
+            y_list = [y[:,:self.y_dim].clone()]
+            x_list = [x[:,:self.x_dim].clone()]
+            s_list = [s[:,:self.s_dim].clone()]
+            z_list = [z[:,:self.z_dim].clone()]
 
             # resample from data
             for t in range(1, self.T):
-                valid_idx = (y_masked[:,t] >=-0.5).nonzero(as_tuple=True)[0]
-                sample_idx = valid_idx[torch.randint(0, len(valid_idx), (n,))]
-                y_list.append(y[sample_idx, t*self.y_dim:((t+1)*self.y_dim)])
-                x_list.append(x[sample_idx, :((t+1)*self.x_dim)])
-                z_list.append(z[sample_idx, :((t+1)*self.z_dim)])
-                s_list.append(s[sample_idx, :self.s_dim])
+                # Determine valid and invalid indices for the current time step t
+                valid_idx = (y_masked[:, t] >= -0.5).nonzero(as_tuple=True)[0]
+                invalid_idx = (y_masked[:, t] < -0.5).nonzero(as_tuple=True)[0]
+
+                if invalid_idx.numel() == 0:
+                    y_list.append(y[:, (t*self.y_dim):((t+1)*self.y_dim)].clone())
+                    x_list.append(x[:, :((t+1)*self.x_dim)].clone())
+                    z_list.append(z[:, :((t+1)*self.z_dim)].clone())
+                    s_list.append(s[:, :self.s_dim].clone())
+                else:
+                    # For each invalid position, sample a replacement index from the valid positions.
+                    # The number of samples equals the number of invalid positions.
+                    sampled_idx = valid_idx[torch.randint(0, len(valid_idx), (len(invalid_idx),))]
+                    
+                    # For the current time step, get a copy of the original data.
+                    # This ensures that valid positions remain unchanged.
+                    y_t = y[:, (t*self.y_dim):(t+1)*self.y_dim].clone()
+                    x_t = x[:, :((t+1)*self.x_dim)].clone()
+                    z_t = z[:, :((t+1)*self.z_dim)].clone()
+                    s_t = s[:, :self.s_dim].clone()
+                    
+                    # Replace only the invalid positions with the sampled valid ones.
+                    y_t[invalid_idx] = y[sampled_idx, (t*self.y_dim):(t+1)*self.y_dim].clone()
+                    x_t[invalid_idx] = x[sampled_idx, :((t+1)*self.x_dim)].clone()
+                    z_t[invalid_idx] = z[sampled_idx, :((t+1)*self.z_dim)].clone()
+                    s_t[invalid_idx] = s[sampled_idx, :self.s_dim].clone()
+                    
+                    # Append the corrected data for time step t.
+                    y_list.append(y_t)
+                    x_list.append(x_t)
+                    z_list.append(z_t)
+                    s_list.append(s_t)
+
             y_sample = torch.cat(y_list, dim=1)
 
             self.optimizer_y.zero_grad()
@@ -593,6 +623,7 @@ class FrengressionSurv(torch.nn.Module):
             eta2 = []
             perm = torch.randperm(x.size(0))
             for t in range(self.T):
+                
                 sxz_p1 = torch.cat([s_list[t], x_list[t], z_list[t]], dim=1)
                 sxz_p2 = torch.cat([s_list[t][perm], x_list[t][perm], z_list[t][perm]], dim=1)
                 etat1 = self.model_eta[t](sxz_p1)
@@ -609,7 +640,135 @@ class FrengressionSurv(torch.nn.Module):
             self.optimizer_y.step()
             if (i == 0) or ((i + 1) % print_every_iter == 0):
                 print(f'Epoch {i + 1}: loss {loss.item():.4f},\tloss_y {loss_y.item():.4f}, {loss1_y.item():.4f}, {loss2_y.item():.4f},\tloss_eta {loss_eta.item():.4f}, {loss1_eta.item():.4f}, {loss2_eta.item():.4f}')
-    
+    # def train_y(self, s, x, z, y, num_iters=100, lr=1e-3, print_every_iter=10):
+    #     # Set all models to training mode and collect their parameters.
+    #     all_parameters = []
+    #     for t in range(self.T):
+    #         self.model_y[t].train()
+    #         self.model_eta[t].train()
+    #         all_parameters += list(self.model_y[t].parameters()) + list(self.model_eta[t].parameters())
+
+    #     self.optimizer_y = torch.optim.Adam(all_parameters, lr=lr)
+    #     s = s.to(self.device)
+    #     x = x.to(self.device)
+    #     y = y.to(self.device)
+    #     z = z.to(self.device)
+
+    #     n = x.shape[0]
+    #     # --- Build the mask for y ---
+    #     # (Assuming that once an event is observed (y > 0) at any column, all subsequent entries become invalid.)
+    #     event_indicator = (y > 0).float()
+    #     c = torch.cumsum(event_indicator, dim=1)
+    #     c_shifted = torch.zeros_like(c)
+    #     c_shifted[:, 1:] = c[:, :-1]
+    #     mask_event = (c_shifted > 0)  # True for entries that should be masked (invalid)
+    #     y_masked = y.clone()
+    #     y_masked[mask_event] = -1  # mark invalid entries (using -1 as in your original code)
+
+    #     # We'll build per–time–step lists for the data and also record a validity mask for each time step.
+    #     # (We assume here that y is organized in contiguous blocks of size self.y_dim per time step.)
+    #     for i in range(num_iters):
+    #         # Lists to store per–time–step inputs, targets, and validity masks.
+    #         y_list, x_list, s_list, z_list, valid_mask_list = [], [], [], [], []
+    #         for t in range(self.T):
+    #             # Extract data for time step t.
+    #             y_t = y[:, t * self.y_dim : (t + 1) * self.y_dim]
+    #             # For x and z, we assume the features are cumulative up to time t:
+    #             x_t = x[:, : (t + 1) * self.x_dim]
+    #             z_t = z[:, : (t + 1) * self.z_dim]
+    #             # s remains the same (or you can change this if needed):
+    #             s_t = s[:, : self.s_dim]
+
+    #             y_list.append(y_t)
+    #             x_list.append(x_t)
+    #             s_list.append(s_t)
+    #             z_list.append(z_t)
+
+    #             # Build a validity mask for time t.
+    #             # Here we use the first element of the t-th block in y_masked for validity.
+    #             # (If self.y_dim > 1 and you want to require that all elements are valid, consider:
+    #             #   valid_t = (y_masked[:, t*self.y_dim:(t+1)*self.y_dim] >= -0.5).all(dim=1) )
+    #             valid_t = (y_masked[:, t * self.y_dim] >= -0.5)  # boolean tensor of shape (n,)
+    #             valid_mask_list.append(valid_t)
+
+    #         # --- Compute predictions for y ---
+    #         y_pred1_list, y_pred2_list = [], []
+    #         for t in range(self.T):
+    #             # Build the features for eta.
+    #             sxz_p = torch.cat([s_list[t], x_list[t], z_list[t]], dim=1)
+    #             etat1 = self.model_eta[t](sxz_p)
+    #             etat2 = self.model_eta[t](sxz_p)
+                
+    #             if self.s_in_predict:
+    #                 sxeta_p1 = torch.cat([s_list[t], x_list[t], etat1], dim=1)
+    #                 yt1 = self.model_y[t](sxeta_p1)
+    #                 sxeta_p2 = torch.cat([s_list[t], x_list[t], etat2], dim=1)
+    #                 yt2 = self.model_y[t](sxeta_p2)
+    #             else:
+    #                 xeta_p1 = torch.cat([x_list[t], etat1], dim=1)
+    #                 xeta_p2 = torch.cat([x_list[t], etat2], dim=1)
+    #                 yt1 = self.model_y[t](xeta_p1)
+    #                 yt2 = self.model_y[t](xeta_p2)
+    #             y_pred1_list.append(yt1)
+    #             y_pred2_list.append(yt2)
+
+    #         # --- Compute the energy loss for y over time steps using the per–step mask ---
+    #         loss_y = 0.0
+    #         loss_y1 = 0.0
+    #         loss_y2 = 0.0
+    #         for t in range(self.T):
+    #             valid = valid_mask_list[t]  # Boolean tensor of shape (n,)
+    #             if valid.sum() > 0:  # Only compute loss if there are valid examples.
+    #                 loss_t, loss1_t, loss2_t = energy_loss_two_sample(
+    #                     y_list[t][valid],       # only valid target entries at time t
+    #                     y_pred1_list[t][valid], # only valid prediction 1
+    #                     y_pred2_list[t][valid]  # only valid prediction 2
+    #                 )
+    #                 loss_y   += loss_t
+    #                 loss_y1  += loss1_t
+    #                 loss_y2  += loss2_t
+    #             # (If no sample is valid at time t, that step simply contributes 0 to the loss.)
+
+    #         # --- Compute the energy loss for eta over time steps ---
+    #         # Note: We use the same validity mask as for y. (Adjust if needed.)
+    #         loss_eta = 0.0
+    #         loss_eta1 = 0.0
+    #         loss_eta2 = 0.0
+    #         # Create a "true" eta target with the same overall shape as y.
+    #         eta_true = torch.randn(y.size(), device=self.device)
+    #         for t in range(self.T):
+    #             valid = valid_mask_list[t]
+    #             if valid.sum() > 0:
+    #                 # For eta, we use a random permutation for the second prediction.
+    #                 perm = torch.randperm(n)
+    #                 sxz_p1 = torch.cat([s_list[t], x_list[t], z_list[t]], dim=1)
+    #                 sxz_p2 = torch.cat([s_list[t][perm], x_list[t][perm], z_list[t][perm]], dim=1)
+    #                 etat1 = self.model_eta[t](sxz_p1)
+    #                 etat2 = self.model_eta[t](sxz_p2)
+    #                 # Extract the corresponding slice from eta_true.
+    #                 eta_true_t = eta_true[:, t * self.y_dim : (t + 1) * self.y_dim]
+    #                 loss_t, loss1_t, loss2_t = energy_loss_two_sample(
+    #                     eta_true_t[valid],
+    #                     etat1[valid],
+    #                     etat2[valid]
+    #                 )
+    #                 loss_eta   += loss_t
+    #                 loss_eta1  += loss1_t
+    #                 loss_eta2  += loss2_t
+
+    #         # Total loss is the sum of the y and eta losses.
+    #         loss = loss_y + loss_eta
+
+    #         self.optimizer_y.zero_grad()
+    #         loss.backward()
+    #         self.optimizer_y.step()
+
+    #         if (i == 0) or ((i + 1) % print_every_iter == 0):
+    #             print(f'Epoch {i + 1}: total loss {loss.item():.4f}, '
+    #                 f'y loss {loss_y.item():.4f} (parts: {loss_y1.item():.4f}, {loss_y2.item():.4f}), '
+    #                 f'eta loss {loss_eta.item():.4f} (parts: {loss_eta1.item():.4f}, {loss_eta2.item():.4f})')
+
+
     
     @torch.no_grad()
     def sample_causal_margin(self,s, x, sample_size=100):
