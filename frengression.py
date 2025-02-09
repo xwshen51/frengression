@@ -117,7 +117,7 @@ class Frengression(torch.nn.Module):
         self.model_y = StoNet(x_dim + y_dim, y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act).to(device)
         self.model_eta = StoNet(x_dim + z_dim, y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False).to(device)
         
-    def train_xz(self, x, z, num_iters=100, lr=1e-3, print_every_iter=10):
+    def train_xz(self, x, z, num_iters=100, lr=1e-4, print_every_iter=10):
         self.model_xz.train()
         self.optimizer_xz = torch.optim.Adam(self.model_xz.parameters(), lr=lr)
         xz = torch.cat([x, z], dim=1)
@@ -138,7 +138,7 @@ class Frengression(torch.nn.Module):
             if (i == 0) or ((i + 1) % print_every_iter == 0):
                 print(f'Epoch {i + 1}: loss {loss.item():.4f}, loss1 {loss1.item():.4f}, loss2 {loss2.item():.4f}')
     
-    def train_y(self, x, z, y, num_iters=100, lr=1e-3, print_every_iter=10):
+    def train_y(self, x, z, y, num_iters=100, lr=1e-4, print_every_iter=10):
         self.model_y.train()
         self.model_eta.train()
         self.optimizer_y = torch.optim.Adam(list(self.model_y.parameters()) + list(self.model_eta.parameters()), lr=lr)
@@ -321,7 +321,7 @@ class FrengressionSeq(torch.nn.Module):
         return torch.cat(y_all, dim=1)
 
         
-    def train_xz(self, s, x, z, y, num_iters=100, lr=1e-3, print_every_iter=10):
+    def train_xz(self, s, x, z, y, num_iters=100, lr=1e-4, print_every_iter=10):
         for model in self.model_xz:
             model.train()
         all_parameters = []
@@ -347,7 +347,7 @@ class FrengressionSeq(torch.nn.Module):
             if (i == 0) or ((i + 1) % print_every_iter == 0):
                 print(f'Epoch {i + 1}: loss {loss.item():.4f}, loss1 {loss1.item():.4f}, loss2 {loss2.item():.4f}')
     
-    def train_y(self, s, x, z, y, num_iters=100, lr=1e-3, print_every_iter=10):
+    def train_y(self, s, x, z, y, num_iters=100, lr=1e-4, print_every_iter=10):
         all_parameters = []
         for t in range(self.T):
             self.model_y[t].train()
@@ -499,7 +499,7 @@ class FrengressionSurv(torch.nn.Module):
         return torch.cat(x_all, dim=1), torch.cat(z_all, dim=1)
 
         
-    def train_xz(self, s, x, z, y, num_iters=100, lr=1e-3, print_every_iter=10):
+    def train_xz(self, s, x, z, y, num_iters=100, lr=1e-4, print_every_iter=10):
         for model in self.model_xz:
             model.train()
         all_parameters = []
@@ -525,7 +525,7 @@ class FrengressionSurv(torch.nn.Module):
             if (i == 0) or ((i + 1) % print_every_iter == 0):
                 print(f'Epoch {i + 1}: loss {loss.item():.4f}, loss1 {loss1.item():.4f}, loss2 {loss2.item():.4f}')
     
-    def train_y(self, s, x, z, y, num_iters=100, lr=1e-3, print_every_iter=10):
+    def train_y(self, s, x, z, y, num_iters=100, lr=1e-4, print_every_iter=10):
         all_parameters = []
         for t in range(self.T):
             self.model_y[t].train()
@@ -640,7 +640,7 @@ class FrengressionSurv(torch.nn.Module):
             self.optimizer_y.step()
             if (i == 0) or ((i + 1) % print_every_iter == 0):
                 print(f'Epoch {i + 1}: loss {loss.item():.4f},\tloss_y {loss_y.item():.4f}, {loss1_y.item():.4f}, {loss2_y.item():.4f},\tloss_eta {loss_eta.item():.4f}, {loss1_eta.item():.4f}, {loss2_eta.item():.4f}')
-    # def train_y(self, s, x, z, y, num_iters=100, lr=1e-3, print_every_iter=10):
+    # def train_y(self, s, x, z, y, num_iters=100, lr=1e-4, print_every_iter=10):
     #     # Set all models to training mode and collect their parameters.
     #     all_parameters = []
     #     for t in range(self.T):
