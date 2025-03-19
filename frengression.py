@@ -169,6 +169,18 @@ class Frengression(torch.nn.Module):
         x = x.to(self.device)
         return self.model_y.predict(x, target, sample_size)
 
+    @torch.no_grad()
+    def sample_xz(self, sample_size=100):
+        self.eval()
+        xz = self.model_xz(sample_size)
+        x = xz[:, :self.x_dim]
+        z = xz[:, self.x_dim:]
+        if self.x_binary:
+            x = (x > 0).float()
+        if self.z_binary_dims>0:
+            z[:, :self.z_binary_dims] = (z[:, :self.z_binary_dims] > 0).float()
+
+        return x, z    
         
     @torch.no_grad()
     def sample_joint(self, sample_size=100):
@@ -216,7 +228,7 @@ class Frengression(torch.nn.Module):
 class FrengressionSeq(torch.nn.Module):
     def __init__(self, x_dim, y_dim, z_dim, T, s_dim,
                  num_layer=3, hidden_dim=100, noise_dim=10,
-                 x_binary=False, z_binary=False, y_binary=False,
+                 x_binary=False, z_binary=False, y_binary=False, s_binary_dims = 0,
                  s_in_predict=True,
                  device=torch.device('cuda')):
         super().__init__()
@@ -224,6 +236,7 @@ class FrengressionSeq(torch.nn.Module):
         self.y_dim = y_dim
         self.z_dim = z_dim
         self.s_dim = s_dim
+        self.s_binary_dims = s_binary_dims
         self.T = T
         self.num_layer = num_layer
         self.hidden_dim = hidden_dim
@@ -277,7 +290,8 @@ class FrengressionSeq(torch.nn.Module):
             self.model_eta.append(
                 StoNet(s_dim+(x_dim + z_dim)*(t + 1), y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, verbose=False).to(device)
             )
-        
+    
+
     
     def sample_xz(self, s=None, x=None, z=None, y = None):
         xz = self.model_xz[0](s)
