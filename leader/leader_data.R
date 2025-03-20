@@ -10,6 +10,8 @@ library(haven)
 library(survival)
 library(tidyr)
 library(purrr)
+library(stringr)
+
 
 ## baseline ####
 bsl_vars <- c("SEX", "AGE", "RACE", "SMOKER", "DIABDUR", "BMIBL", "HBA1CBL",
@@ -219,6 +221,54 @@ generate_outcome<-function(){
   # Select the final columns: one row per subject and columns for each interval and outcome
   final_table <- surv_table %>% 
     select(USUBJID, starts_with("Y"), starts_with("D"), starts_with("I"))
+  
+  final_table=select(final_table,-c("Y","Y11","D","D11","I","I11"))
 
   return(final_table)
+}
+# First, add a new column 'month' that extracts the month number.
+# If "DAY 0" appears in AVISIT, mark month as "0"; otherwise, extract the digits after "MONTH ".
+df_long <- df_long %>%
+  mutate(month = if_else(str_detect(AVISIT, "DAY\\s*0"),
+                        "0",
+                        str_extract(AVISIT, "(?<=MONTH\\s)\\d+")))
+
+# Optionally, filter to keep only rows that have a month value (if desired)
+df_long_month <- df_long %>% 
+  filter(!is.na(month))
+generate_egfr<-function(){
+  df_egfr <- df_long_month %>%
+    filter(PARAMCD == "EGFRCKD") %>%
+    select(USUBJID, month, AVAL) %>%
+    group_by(USUBJID, month) %>% 
+    summarise(AVAL = first(AVAL), .groups = "drop") %>%
+    pivot_wider(id_cols = USUBJID, 
+                names_from = month, 
+                values_from = AVAL)
+  return(df_egfr)
+}
+generate_hba1c<-function(){
+  # HBA1C table
+  df_hba1c <- df_long_month %>%
+    filter(PARAMCD == "HBA1C") %>%
+    select(USUBJID, month, AVAL) %>%
+    group_by(USUBJID, month) %>% 
+    summarise(AVAL = first(AVAL), .groups = "drop") %>%
+    pivot_wider(id_cols = USUBJID, 
+                names_from = month, 
+                values_from = AVAL)
+  return(df_hba1c)
+}
+
+generate_bmi<-function(){
+    # BMI table
+  df_bmi <- df_long_month %>%
+    filter(PARAMCD == "BMI") %>%
+    select(USUBJID, month, AVAL) %>%
+    group_by(USUBJID, month) %>% 
+    summarise(AVAL = first(AVAL), .groups = "drop") %>%
+    pivot_wider(id_cols = USUBJID, 
+                names_from = month, 
+                values_from = AVAL)
+return(df_bmi)
 }
