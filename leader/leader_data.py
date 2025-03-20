@@ -35,3 +35,15 @@ def generate_bsl():
     with localconverter(robjects.default_converter + pandas2ri.converter):
         df = robjects.conversion.rpy2py(r_dataframe)
     return df
+
+def generate_outcome():
+    pandas2ri.activate()
+    # Source the ./data.r script for data.causl dgp function
+    with suppress_r_output():
+        robjects.r['source'](r'leader_data.R')
+        generate_outcome = robjects.globalenv['generate_outcome']
+        r_dataframe = generate_outcome()
+    # Use the localconverter context manager to convert the R dataframe to a Pandas DataFrame
+    with localconverter(robjects.default_converter + pandas2ri.converter):
+        df = robjects.conversion.rpy2py(r_dataframe)
+    return df

@@ -8,7 +8,8 @@ library(npcausal)
 library(dplyr)
 library(haven)
 library(survival)
-
+library(tidyr)
+library(purrr)
 
 ## baseline ####
 bsl_vars <- c("SEX", "AGE", "RACE", "SMOKER", "DIABDUR", "BMIBL", "HBA1CBL",
@@ -146,4 +147,78 @@ generate_bsl <- function(){
     # Combine USUBJID, ARM with the newly processed covariates
     df_bsl_converted <- cbind(df_bsl[, c("USUBJID", "ARM")], cov_df)
     return(df_bsl_converted)
+}
+
+generate_outcome<-function(){
+
+  # Determine maximum follow-up time and number of intervals (each of 6 months)
+  max_time <- max(df_out$AVAL)
+  num_intervals <- ceiling(max_time / 6)
+
+  # Separate the outcomes:
+  # MACE outcome (use PARAMCD "MACEEVTM")
+  mace <- df_out %>% 
+    filter(PARAMCD == "MACEEVTM") %>% 
+    select(USUBJID, time = AVAL, event)
+
+  # Death outcome (use PARAMCD "ALDTHTM")
+  death <- df_out %>% 
+    filter(PARAMCD == "ALDTHTM") %>% 
+    select(USUBJID, time = AVAL, event = death)
+
+  # Non-fatal MI outcome (use PARAMCD "MACEMITM")
+  mi <- df_out %>% 
+    filter(PARAMCD == "MACEMITM") %>% 
+    select(USUBJID, time = AVAL, event)
+
+  # Create a wide table that has one row per subject and merge outcomes
+  surv_table <- df_out %>% 
+    distinct(USUBJID) %>% 
+    left_join(mace, by = "USUBJID") %>% 
+    rename(time_mace = time, event_mace = event) %>%
+    left_join(death, by = "USUBJID") %>% 
+    rename(time_death = time, event_death = event) %>%
+    left_join(mi, by = "USUBJID") %>% 
+    rename(time_mi = time, event_mi = event)
+
+  # Helper function to create the interval vector:
+  # - time: the time to event (in months)
+  # - event: indicator (1 = event occurred, 0 = censored/no event)
+  # - num_intervals: total number of intervals
+  # - interval_length: length of each interval (4 months here)
+  create_interval_vector <- function(time, event, num_intervals, interval_length = 6) {
+    res <- rep(0, num_intervals)
+    if(event == 1) {
+      # Determine which interval the event falls into
+      event_interval <- ceiling(time / interval_length)
+      if(event_interval > num_intervals) event_interval <- num_intervals
+      res[event_interval] <- 1
+      # Set subsequent intervals to NA once the event occurs
+      if(event_interval < num_intervals) {
+        res[(event_interval + 1):num_intervals] <- NA
+      }
+    }
+    return(res)
+  }
+
+  # Apply the function to each outcome
+  surv_table <- surv_table %>%
+    mutate(
+      Y = map2(time_mace, event_mace, ~create_interval_vector(.x, .y, num_intervals)),
+      D = map2(time_death, event_death, ~create_interval_vector(.x, .y, num_intervals)),
+      I = map2(time_mi, event_mi, ~create_interval_vector(.x, .y, num_intervals))
+    )
+
+  # Expand the list columns into separate columns for each interval:
+  for (i in 1:num_intervals) {
+    surv_table[[paste0("Y", i)]] <- map_dbl(surv_table$Y, ~.x[i])
+    surv_table[[paste0("D", i)]] <- map_dbl(surv_table$D, ~.x[i])
+    surv_table[[paste0("I", i)]] <- map_dbl(surv_table$I, ~.x[i])
+  }
+
+  # Select the final columns: one row per subject and columns for each interval and outcome
+  final_table <- surv_table %>% 
+    select(USUBJID, starts_with("Y"), starts_with("D"), starts_with("I"))
+
+  return(final_table)
 }
