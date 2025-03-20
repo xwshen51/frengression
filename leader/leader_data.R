@@ -140,11 +140,10 @@ generate_bsl <- function(){
     cov_df <- cov_df[, c(names(cov_df)[is_binary], names(cov_df)[!is_binary])]
 
     # Step 4. Rename all covariate columns as X_1, X_2, …, X_p
-    new_names <- paste0("X", seq_along(cov_df))
-    colnames(cov_df) <- new_names
+    # new_names <- paste0("X", seq_along(cov_df))
+    # colnames(cov_df) <- new_names
 
     # Combine USUBJID, ARM with the newly processed covariates
     df_bsl_converted <- cbind(df_bsl[, c("USUBJID", "ARM")], cov_df)
     return(df_bsl_converted)
 }
-
