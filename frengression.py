@@ -514,7 +514,7 @@ class FrengressionSurv(torch.nn.Module):
         return torch.cat(x_all, dim=1), torch.cat(z_all, dim=1)
 
         
-    def train_xz(self, s, x, z, y, num_iters=100, lr=1e-3, print_every_iter=10):
+    def train_xz(self, s, x, z, num_iters=100, lr=1e-3, print_every_iter=10):
         for model in self.model_xz:
             model.train()
         all_parameters = []
