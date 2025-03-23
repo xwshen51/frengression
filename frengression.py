@@ -514,7 +514,7 @@ class FrengressionSurv(torch.nn.Module):
         return torch.cat(x_all, dim=1), torch.cat(z_all, dim=1)
 
         
-    def train_xz(self, s, x, z, num_iters=100, lr=1e-3, print_every_iter=10):
+    def train_xz(self, s, x, z, y, num_iters=100, lr=1e-3, print_every_iter=10):
         for model in self.model_xz:
             model.train()
         all_parameters = []
@@ -524,9 +524,9 @@ class FrengressionSurv(torch.nn.Module):
         xz = torch.cat([x, z], dim=1)
         for i in range(num_iters):
             self.optimizer_xz.zero_grad()
-            sample1_x, sample1_z = self.sample_xz(s=s, x=x, z=z)
+            sample1_x, sample1_z = self.sample_xz(s=s, x=x, z=z,y=y)
             sample1 = torch.cat([sample1_x, sample1_z], dim=1)
-            sample2_x, sample2_z = self.sample_xz(s=s, x=x, z=z)
+            sample2_x, sample2_z = self.sample_xz(s=s, x=x, z=z,y=y)
             sample2 = torch.cat([sample2_x, sample2_z], dim=1)
             if self.x_binary:
                 sample1[:, :self.x_dim] = sigmoid(sample1[:, :self.x_dim])
