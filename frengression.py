@@ -785,7 +785,7 @@ class FrengressionSurv(torch.nn.Module):
         z_all = z0
         sxz_p = torch.cat([s, x0, z0], dim=1)
         etat0 = self.model_eta[0](sxz_p)
-        sxeta_p0 = torch.cat([s, x0, z0], dim=1)
+        sxeta_p0 = torch.cat([s, x0, etat0], dim=1)
         y0 = (self.model_y[0](sxeta_p0)>0.5).float()
         y_all = y0
         for t in range(1,self.T):
