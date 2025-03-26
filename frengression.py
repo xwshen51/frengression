@@ -451,7 +451,7 @@ class FrengressionSurv(torch.nn.Module):
         #generate x1z1 to xTzT
         for t in range(T-1):
             self.model_xz.append(
-                StoNet(s_dim + (x_dim + z_dim)* (t + 1)+ y_dim , x_dim + z_dim, num_layer, hidden_dim, max(x_dim + z_dim+y_dim, noise_dim), add_bn=False, noise_all_layer=False,verbose=False).to(device)
+                StoNet(s_dim + (x_dim + z_dim)* (t + 1) , x_dim + z_dim, num_layer, hidden_dim, max(x_dim + z_dim+y_dim, noise_dim), add_bn=False, noise_all_layer=False,verbose=False).to(device)
             )
         
         out_act = 'sigmoid' if y_binary else None
@@ -500,8 +500,8 @@ class FrengressionSurv(torch.nn.Module):
         x_all = [x0]
         z_all = [z0]
         for t in range(1,self.T):
-            sxzy_p = torch.cat([s, x[:,:(t*self.x_dim)], z[:,:(t*self.z_dim)], y[:, ((t-1)*self.y_dim):(t*self.y_dim)]], dim=1)
-            xz = self.model_xz[t](sxzy_p)
+            sxz_p = torch.cat([s, x[:,:(t*self.x_dim)], z[:,:(t*self.z_dim)]], dim=1)
+            xz = self.model_xz[t](sxz_p)
             xt = xz[:, :self.x_dim]
             zt = xz[:, self.x_dim:]
             if self.x_binary:
@@ -516,11 +516,11 @@ class FrengressionSurv(torch.nn.Module):
 
         
     def train_xz(self, s, x, z, y, num_iters=100, lr=1e-3, print_every_iter=10):
-        for model in self.model_xz:
-            model.train()
         all_parameters = []
         for t in range(self.T):
+            self.model_xz[t].train()
             all_parameters += list(self.model_xz[t].parameters())
+        
         self.optimizer_xz = torch.optim.Adam(all_parameters, lr=lr)
         s = s.to(self.device)
         x = x.to(self.device)
@@ -538,15 +538,9 @@ class FrengressionSurv(torch.nn.Module):
             y_masked = y.clone()
             y_masked[mask] = -1
 
-
-            y_list = [y[:,:self.y_dim].clone()]
             x_list = [x[:,:self.x_dim].clone()]
             s_list = [s[:,:self.s_dim].clone()]
             z_list = [z[:,:self.z_dim].clone()]
-            # y_list = []
-            # x_list = []
-            # s_list = []
-            # z_list = []
 
             x_label_list = [x[:,:self.x_dim].clone()]
             z_label_list = [z[:,:self.z_dim].clone()]
@@ -557,12 +551,11 @@ class FrengressionSurv(torch.nn.Module):
                 invalid_idx = (y_masked[:, t] < -0.5).nonzero(as_tuple=True)[0]
 
                 if invalid_idx.numel() == 0:
-                    y_list.append(y[:, ((t-1)*self.y_dim):((t)*self.y_dim)].clone())
-                    x_list.append(x[:, :((t)*self.x_dim)].clone())
-                    z_list.append(z[:, :((t)*self.z_dim)].clone())
+                    x_list.append(x[:, :(t*self.x_dim)].clone())
+                    z_list.append(z[:, :(t*self.z_dim)].clone())
                     s_list.append(s[:, :self.s_dim].clone())
-                    x_label_list.append(x[:, ((t)*self.x_dim):((t+1)*self.x_dim)].clone())
-                    z_label_list.append(x[:, ((t)*self.z_dim):((t+1)*self.z_dim)].clone())
+                    x_label_list.append(x[:, (t*self.x_dim):((t+1)*self.x_dim)].clone())
+                    z_label_list.append(z[:, (t*self.z_dim):((t+1)*self.z_dim)].clone())
                 else:
                     # For each invalid position, sample a replacement index from the valid positions.
                     # The number of samples equals the number of invalid positions.
@@ -570,25 +563,23 @@ class FrengressionSurv(torch.nn.Module):
                     
                     # For the current time step, get a copy of the original data.
                     # This ensures that valid positions remain unchanged.
-                    y_t = y[:, ((t-1)*self.y_dim):(t)*self.y_dim].clone()
                     x_t = x[:, :((t)*self.x_dim)].clone()
                     z_t = z[:, :((t)*self.z_dim)].clone()
                     s_t = s[:, :self.s_dim].clone()
 
-                    x_t_label = x[:, ((t)*self.x_dim):(t+1)*self.x_dim].clone()
-                    z_t_label = z[:, ((t)*self.z_dim):(t+1)*self.z_dim].clone()
+                    x_t_label = x[:, (t*self.x_dim):(t+1)*self.x_dim].clone()
+                    z_t_label = z[:, (t*self.z_dim):(t+1)*self.z_dim].clone()
                     
                     # Replace only the invalid positions with the sampled valid ones.
-                    y_t[invalid_idx] = y[sampled_idx, ((t-1)*self.y_dim):(t)*self.y_dim].clone()
-                    x_t[invalid_idx] = x[sampled_idx, :((t)*self.x_dim)].clone()
-                    z_t[invalid_idx] = z[sampled_idx, :((t)*self.z_dim)].clone()
+                    x_t[invalid_idx] = x[sampled_idx, :(t*self.x_dim)].clone()
+                    z_t[invalid_idx] = z[sampled_idx, :(t*self.z_dim)].clone()
                     s_t[invalid_idx] = s[sampled_idx, :self.s_dim].clone()
 
-                    x_t_label[invalid_idx] = x[sampled_idx, ((t)*self.x_dim):(t+1)*self.x_dim].clone()
-                    z_t_label[invalid_idx] = z[sampled_idx, ((t)*self.z_dim):(t+1)*self.z_dim].clone()
+                    x_t_label[invalid_idx] = x[sampled_idx, (t*self.x_dim):(t+1)*self.x_dim].clone()
+                    z_t_label[invalid_idx] = z[sampled_idx, (t*self.z_dim):(t+1)*self.z_dim].clone()
                     
                     # Append the corrected data for time step t.
-                    y_list.append(y_t)
+
                     x_list.append(x_t)
                     z_list.append(z_t)
                     s_list.append(s_t)
@@ -597,20 +588,20 @@ class FrengressionSurv(torch.nn.Module):
                     z_label_list.append(z_t_label)
             
 
-            self.optimizer_xz.zero_grad()
             x_sample = torch.cat(x_label_list, dim=1)
             z_sample = torch.cat(z_label_list, dim=1)
             xz_sample = torch.cat([x_sample, z_sample], dim=1)
-
+            
+            self.optimizer_xz.zero_grad()
             xz_sample1 = self.model_xz[0](s)
             x_sample1, z_sample1 = [xz_sample1[:, :self.x_dim]], [xz_sample1[:,self.x_dim:]]
             xz_sample2 = self.model_xz[0](s)
             x_sample2, z_sample2 = [xz_sample2[:, :self.x_dim]], [xz_sample2[:,self.x_dim:]]
 
             for t in range(1, self.T):
-                sxzy_p = torch.cat([s_list[t],x_list[t], z_list[t],y_list[t]],dim=1)
-                xz_sample1 = self.model_xz[t](sxzy_p)
-                xz_sample2 = self.model_xz[t](sxzy_p)
+                sxz_p = torch.cat([s_list[t],x_list[t], z_list[t]],dim=1)
+                xz_sample1 = self.model_xz[t](sxz_p)
+                xz_sample2 = self.model_xz[t](sxz_p)
                 if self.x_binary:
                     xz_sample1[:, :self.x_dim] = sigmoid(xz_sample1[:, :self.x_dim])
                     xz_sample2[:, :self.x_dim] = sigmoid(xz_sample2[:, :self.x_dim])
@@ -753,7 +744,6 @@ class FrengressionSurv(torch.nn.Module):
             if (i == 0) or ((i + 1) % print_every_iter == 0):
                 print(f'Epoch {i + 1}: loss {loss.item():.4f},\tloss_y {loss_y.item():.4f}, {loss1_y.item():.4f}, {loss2_y.item():.4f},\tloss_eta {loss_eta.item():.4f}, {loss1_eta.item():.4f}, {loss2_eta.item():.4f}')
 
-
     
     @torch.no_grad()
     def sample_causal_margin(self,s, x, sample_size=100):
@@ -789,7 +779,7 @@ class FrengressionSurv(torch.nn.Module):
         y0 = (self.model_y[0](sxeta_p0)>0.5).float()
         y_all = y0
         for t in range(1,self.T):
-            sxzy_p = torch.cat([s, x_all[:,:(t*self.x_dim)], z_all[:,:(t*self.z_dim)], y_all[:, ((t-1)*self.y_dim):(t*self.y_dim)]], dim=1)
+            sxzy_p = torch.cat([s, x_all[:,:(t*self.x_dim)], z_all[:,:(t*self.z_dim)]], dim=1)
             xz = self.model_xz[t](sxzy_p)
             xt = xz[:, :self.x_dim]
             zt = xz[:, self.x_dim:]
