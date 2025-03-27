@@ -628,7 +628,7 @@ class FrengressionSurv(torch.nn.Module):
                 print(f'Epoch {i + 1}: loss {loss.item():.4f}, loss1 {loss1.item():.4f}, loss2 {loss2.item():.4f}')
             
     
-    def train_y(self, s, x, z, y, num_iters=100, lr=1e-3, print_every_iter=10):
+    def train_y(self, s, x, z, y, num_iters=100, lr=1e-3, print_every_iter=10, reg_lambda = 0):
         all_parameters = []
         for t in range(self.T):
             self.model_y[t].train()
@@ -642,6 +642,8 @@ class FrengressionSurv(torch.nn.Module):
         z = z.to(self.device)
 
         n = x.shape[0]
+        num_events = torch.nansum(y == 1).item()
+        event_ratio_true = num_events / n
 
         
         for i in range(num_iters):
@@ -661,9 +663,37 @@ class FrengressionSurv(torch.nn.Module):
 
             # resample from data
             for t in range(1, self.T):
-                # Determine valid and invalid indices for the current time step t
-                valid_idx = (y_masked[:, t] >= -0.5).nonzero(as_tuple=True)[0]
-                invalid_idx = (y_masked[:, t] < -0.5).nonzero(as_tuple=True)[0]
+                valid_idx = (y_masked[:, t] >= 0).nonzero(as_tuple=True)[0]
+                invalid_idx = (y_masked[:, t] < 0).nonzero(as_tuple=True)[0]
+
+                # Get indices for each class
+                valid_event_idx = (y_masked[:, t] == 1).nonzero(as_tuple=True)[0]
+                valid_survive_idx = (y_masked[:, t] == 0).nonzero(as_tuple=True)[0]
+
+                if invalid_idx.numel() > 0:
+                    sampled_idx = []
+                    for _ in invalid_idx:
+                        if len(valid_event_idx) > 0 and len(valid_survive_idx) > 0:
+                            # Always keep mixture
+                            event_prob = len(valid_event_idx) / (len(valid_event_idx) + len(valid_survive_idx))
+                            if torch.rand(1).item() < event_prob:
+                                sampled_idx.append(valid_event_idx[torch.randint(len(valid_event_idx), (1,))].item())
+                            else:
+                                sampled_idx.append(valid_survive_idx[torch.randint(len(valid_survive_idx), (1,))].item())
+                        else:
+                            # Replenish one class if empty from original y data
+                            replenish_event_idx = (y[:, t] == 1).nonzero(as_tuple=True)[0]
+                            replenish_survive_idx = (y[:, t] == 0).nonzero(as_tuple=True)[0]
+                            if len(valid_event_idx) == 0 and len(replenish_event_idx) > 0:
+                                sampled_idx.append(replenish_event_idx[torch.randint(len(replenish_event_idx), (1,))].item())
+                            elif len(valid_survive_idx) == 0 and len(replenish_survive_idx) > 0:
+                                sampled_idx.append(replenish_survive_idx[torch.randint(len(replenish_survive_idx), (1,))].item())
+                            else:
+                                # Fallback to all valid_idx if both empty (unlikely but safe)
+                                sampled_idx.append(valid_idx[torch.randint(len(valid_idx), (1,))].item())
+
+                    sampled_idx = torch.tensor(sampled_idx, device=y.device)
+
 
                 if invalid_idx.numel() == 0:
                     y_list.append(y[:, (t*self.y_dim):((t+1)*self.y_dim)].clone())
@@ -673,17 +703,17 @@ class FrengressionSurv(torch.nn.Module):
                 else:
                     # For each invalid position, sample a replacement index from the valid positions.
                     # The number of samples equals the number of invalid positions.
-                    sampled_idx = valid_idx[torch.randint(0, len(valid_idx), (len(invalid_idx),))]
+                    # sampled_idx = valid_idx[torch.randint(0, len(valid_idx), (len(invalid_idx),))]
                     
                     # For the current time step, get a copy of the original data.
                     # This ensures that valid positions remain unchanged.
-                    y_t = y[:, (t*self.y_dim):(t+1)*self.y_dim].clone()
+                    y_t = y[:, (t*self.y_dim):((t+1)*self.y_dim)].clone()
                     x_t = x[:, :((t+1)*self.x_dim)].clone()
                     z_t = z[:, :((t+1)*self.z_dim)].clone()
                     s_t = s[:, :self.s_dim].clone()
                     
                     # Replace only the invalid positions with the sampled valid ones.
-                    y_t[invalid_idx] = y[sampled_idx, (t*self.y_dim):(t+1)*self.y_dim].clone()
+                    y_t[invalid_idx] = y[sampled_idx, (t*self.y_dim):((t+1)*self.y_dim)].clone()
                     x_t[invalid_idx] = x[sampled_idx, :((t+1)*self.x_dim)].clone()
                     z_t[invalid_idx] = z[sampled_idx, :((t+1)*self.z_dim)].clone()
                     s_t[invalid_idx] = s[sampled_idx, :self.s_dim].clone()
@@ -724,9 +754,8 @@ class FrengressionSurv(torch.nn.Module):
 
             eta1 = []
             eta2 = []
-            perm = torch.randperm(x.size(0))
             for t in range(self.T):
-                
+                perm = torch.randperm(x.size(0))
                 sxz_p1 = torch.cat([s_list[t], x_list[t], z_list[t]], dim=1)
                 sxz_p2 = torch.cat([s_list[t][perm], x_list[t][perm], z_list[t][perm]], dim=1)
                 etat1 = self.model_eta[t](sxz_p1)
@@ -738,11 +767,25 @@ class FrengressionSurv(torch.nn.Module):
             eta2_cat = torch.cat(eta2,dim=1)
 
             loss_eta, loss1_eta, loss2_eta = energy_loss_two_sample(eta_true, eta1_cat, eta2_cat)
-            loss = loss_y + loss_eta
+            ##
+            # marginal_loss = torch.abs(y_sample1_cat.float().mean() - y_sample.float().mean()) + torch.abs(y_sample2_cat.float().mean() - y_sample.float().mean())
+            num_events1 = torch.nansum(y_sample1_cat >= 0.5).item()
+            event_ratio1 = num_events1 / n
+            num_events2 = torch.nansum(y_sample2_cat >= 0.5).item()
+            event_ratio2 = num_events2 / n
+            marginal_loss = np.abs(event_ratio1 - event_ratio_true) + np.abs(event_ratio2-event_ratio_true)
+
+            eps = 1e-6
+            entropy_loss = 0
+            for yt in y_sample1 + y_sample2:
+                entropy_loss += -(yt * torch.log(yt + eps) + (1 - yt) * torch.log(1 - yt + eps)).mean()
+
+            
+            loss = loss_y + loss_eta + reg_lambda * marginal_loss
             loss.backward()
             self.optimizer_y.step()
             if (i == 0) or ((i + 1) % print_every_iter == 0):
-                print(f'Epoch {i + 1}: loss {loss.item():.4f},\tloss_y {loss_y.item():.4f}, {loss1_y.item():.4f}, {loss2_y.item():.4f},\tloss_eta {loss_eta.item():.4f}, {loss1_eta.item():.4f}, {loss2_eta.item():.4f}')
+                print(f'Epoch {i + 1}: loss {loss.item():.4f},\tloss_y {loss_y.item():.4f}, {loss1_y.item():.4f}, {loss2_y.item():.4f},\tloss_eta {loss_eta.item():.4f}, {loss1_eta.item():.4f}, {loss2_eta.item():.4f}, \tmarginal_loss {marginal_loss.item():.4f}')
 
     
     @torch.no_grad()
