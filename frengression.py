@@ -747,15 +747,16 @@ class FrengressionSurv(torch.nn.Module):
 
             loss_eta, loss1_eta, loss2_eta = energy_loss_two_sample(eta_true, eta1_cat, eta2_cat)
             ##
-            # marginal_loss = torch.abs(y_sample1_cat.float().mean() - y_sample.float().mean()) + torch.abs(y_sample2_cat.float().mean() - y_sample.float().mean())
-            num_events1 = torch.nansum(y_sample1_cat >= 0.5).item()
-            event_ratio1 = num_events1 / n
-            num_events2 = torch.nansum(y_sample2_cat >= 0.5).item()
-            event_ratio2 = num_events2 / n
-            marginal_loss = np.abs(event_ratio1 - event_ratio_true) + np.abs(event_ratio2-event_ratio_true)
+            marginal_loss = torch.abs(y_sample1_cat.float().mean() - y_sample.float().mean()) + torch.abs(y_sample2_cat.float().mean() - y_sample.float().mean())
+            # num_events1 = torch.nansum(y_sample1_cat >= 0.5)
+            # event_ratio1 = num_events1 / n
+            # num_events2 = torch.nansum(y_sample2_cat >= 0.5)
+            # event_ratio2 = num_events2 / n
+            # marginal_loss = np.abs(event_ratio1 - event_ratio_true) + np.abs(event_ratio2-event_ratio_true)
 
             
             loss = loss_y + loss_eta + reg_lambda * marginal_loss
+            # loss = reg_lambda * marginal_loss
             loss.backward()
             self.optimizer_y.step()
             if (i == 0) or ((i + 1) % print_every_iter == 0):
