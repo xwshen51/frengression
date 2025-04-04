@@ -747,7 +747,7 @@ class FrengressionSurv(torch.nn.Module):
 
             loss_eta, loss1_eta, loss2_eta = energy_loss_two_sample(eta_true, eta1_cat, eta2_cat)
             ##
-            marginal_loss = torch.abs(y_sample1_cat.float().mean() - y_sample.float().mean()) + torch.abs(y_sample2_cat.float().mean() - y_sample.float().mean())
+            marginal_loss = (y_sample1_cat.float().mean() - y_sample.float().mean())**2 + (y_sample2_cat.float().mean() - y_sample.float().mean())**2
             # num_events1 = torch.nansum(y_sample1_cat >= 0.5)
             # event_ratio1 = num_events1 / n
             # num_events2 = torch.nansum(y_sample2_cat >= 0.5)
@@ -761,6 +761,8 @@ class FrengressionSurv(torch.nn.Module):
             self.optimizer_y.step()
             if (i == 0) or ((i + 1) % print_every_iter == 0):
                 print(f'Epoch {i + 1}: loss {loss.item():.4f},\tloss_y {loss_y.item():.4f}, {loss1_y.item():.4f}, {loss2_y.item():.4f},\tloss_eta {loss_eta.item():.4f}, {loss1_eta.item():.4f}, {loss2_eta.item():.4f}, \tmarginal_loss {marginal_loss.item():.4f}')
+                print(f'Epoch {i + 1}: y_sample_mean {y_sample.float().mean()}')
+                print(f'Epoch {i + 1}: y_sample1_cat.float().mean() {y_sample1_cat.float().mean()}')
 
     
     @torch.no_grad()
@@ -794,7 +796,7 @@ class FrengressionSurv(torch.nn.Module):
         sxz_p = torch.cat([s, x0, z0], dim=1)
         etat0 = self.model_eta[0](sxz_p)
         sxeta_p0 = torch.cat([s, x0, etat0], dim=1)
-        y0 = (self.model_y[0](sxeta_p0)>0.5).float()
+        y0 = (self.model_y[0](sxeta_p0)>0.5).int()
         y_all = y0
         for t in range(1,self.T):
             sxzy_p = torch.cat([s, x_all[:,:(t*self.x_dim)], z_all[:,:(t*self.z_dim)]], dim=1)
@@ -811,10 +813,10 @@ class FrengressionSurv(torch.nn.Module):
             sxz_p = torch.cat([s, x_all, z_all], dim=1)
             etat = self.model_eta[t](sxz_p)
             sxeta_p = torch.cat([s, x_all, etat], dim=1)
-            yt = (self.model_y[t](sxeta_p)>0.5).float()
+            yt = (self.model_y[t](sxeta_p)>0.5).int()
             y_all = torch.cat([y_all, yt], dim=1)
         
-        return x_all, z_all, y_all.squeeze(0).permute(1, 0)
+        return x_all, z_all, y_all
    
     @torch.no_grad()
     def predict_causal(self, s, x, sample_size=100):
