@@ -747,7 +747,7 @@ class FrengressionSurv(torch.nn.Module):
 
             loss_eta, loss1_eta, loss2_eta = energy_loss_two_sample(eta_true, eta1_cat, eta2_cat)
             ##
-            marginal_loss = (y_sample1_cat.float().mean() - y_sample.float().mean())**2 + (y_sample2_cat.float().mean() - y_sample.float().mean())**2
+            marginal_loss = (y_sample1_cat.float().mean() / y_sample.float().mean()-1)**2 + (y_sample2_cat.float().mean() / y_sample.float().mean()-1)**2
             # num_events1 = torch.nansum(y_sample1_cat >= 0.5)
             # event_ratio1 = num_events1 / n
             # num_events2 = torch.nansum(y_sample2_cat >= 0.5)
