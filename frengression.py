@@ -248,6 +248,7 @@ class FrengressionSeq(torch.nn.Module):
         self.device = device
         # for xz:
         # generate x0z0
+        
         self.model_xz = [
             StoNet(s_dim, x_dim + z_dim, num_layer, hidden_dim, max(x_dim + z_dim, noise_dim), add_bn=False, noise_all_layer=False,verbose=False).to(device)
         ]
@@ -446,7 +447,7 @@ class FrengressionSurv(torch.nn.Module):
         # for xz:
         # generate x0z0
         self.model_xz = [
-            StoNet(s_dim, x_dim + z_dim, num_layer, hidden_dim, max(x_dim + z_dim, noise_dim), add_bn=False, noise_all_layer=False,verbose=False).to(device)
+            StoNet(s_dim, x_dim + z_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False,verbose=False).to(device)
         ]
         #generate x1z1 to xTzT
         for t in range(T-1):
@@ -594,9 +595,18 @@ class FrengressionSurv(torch.nn.Module):
             
             self.optimizer_xz.zero_grad()
             xz_sample1 = self.model_xz[0](s)
-            x_sample1, z_sample1 = [xz_sample1[:, :self.x_dim]], [xz_sample1[:,self.x_dim:]]
             xz_sample2 = self.model_xz[0](s)
-            x_sample2, z_sample2 = [xz_sample2[:, :self.x_dim]], [xz_sample2[:,self.x_dim:]]
+            if self.x_binary:
+                xz_sample1[:, :self.x_dim] =  sigmoid(xz_sample1[:, :self.x_dim])
+                xz_sample2[:, :self.x_dim] = sigmoid(xz_sample2[:, :self.x_dim])
+            if self.z_binary:
+                xz_sample1[:, self.x_dim:] = sigmoid(xz_sample1[:, self.x_dim:])
+                xz_sample2[:, self.x_dim:] = sigmoid(xz_sample2[:, self.x_dim:])
+            x_sample1 =  [xz_sample1[:, :self.x_dim]]
+            z_sample1 =  [xz_sample1[:,self.x_dim:]]
+            
+            x_sample2 = [xz_sample2[:, :self.x_dim]]
+            z_sample2 = [xz_sample2[:,self.x_dim:]]
 
             for t in range(1, self.T):
                 sxz_p = torch.cat([s_list[t],x_list[t], z_list[t]],dim=1)
@@ -817,6 +827,9 @@ class FrengressionSurv(torch.nn.Module):
             y_all = torch.cat([y_all, yt], dim=1)
         
         return x_all, z_all, y_all
+
+
+
    
     @torch.no_grad()
     def predict_causal(self, s, x, sample_size=100):
