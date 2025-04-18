@@ -757,12 +757,17 @@ class FrengressionSurv(torch.nn.Module):
 
             loss_eta, loss1_eta, loss2_eta = energy_loss_two_sample(eta_true, eta1_cat, eta2_cat)
             ##
-            marginal_loss = (y_sample1_cat.float().mean() / y_sample.float().mean()-1)**2 + (y_sample2_cat.float().mean() / y_sample.float().mean()-1)**2
-            # num_events1 = torch.nansum(y_sample1_cat >= 0.5)
-            # event_ratio1 = num_events1 / n
-            # num_events2 = torch.nansum(y_sample2_cat >= 0.5)
-            # event_ratio2 = num_events2 / n
-            # marginal_loss = np.abs(event_ratio1 - event_ratio_true) + np.abs(event_ratio2-event_ratio_true)
+            # Convert all to float and compute per-dimension means
+            mean_y_sample = y_sample.float().mean(dim=0)  # shape: [d]
+            mean_y_sample1 = y_sample1_cat.float().mean(dim=0)  # shape: [d]
+            mean_y_sample2 = y_sample2_cat.float().mean(dim=0)  # shape: [d]
+
+            # Avoid division by zero by adding a small epsilon
+            eps = 1e-6
+
+            # Compute squared relative error per dimension and sum
+            marginal_loss = (((mean_y_sample1 / (mean_y_sample + eps)) - 1) ** 2).mean() + (((mean_y_sample2 / (mean_y_sample + eps)) - 1) ** 2).mean()
+
 
             
             loss = loss_y + loss_eta + reg_lambda * marginal_loss
@@ -827,8 +832,6 @@ class FrengressionSurv(torch.nn.Module):
             y_all = torch.cat([y_all, yt], dim=1)
         
         return x_all, z_all, y_all
-
-
 
    
     @torch.no_grad()
