@@ -734,7 +734,7 @@ class FrengressionSurv(torch.nn.Module):
             
             eta_true_list = []
             for t in range(self.T):
-                sxz_p = torch.cat([s_list[t], x_list[t], z_list[t]], dim=1)
+                # sxz_p = torch.cat([s_list[t], x_list[t], z_list[t]], dim=1)
                 eta_true_t = torch.randn(n, self.y_dim, device=self.device)
                 eta_true_list.append(eta_true_t)
                 
