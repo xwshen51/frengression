@@ -793,7 +793,7 @@ class FrengressionSurv(torch.nn.Module):
                 yt = ((self.model_y[t].sample(x[:,:(t+1)*self.x_dim], sample_size = sample_size))>0.5).float()
             all_y.append(yt)
 
-        return torch.cat(all_y,dim=1).squeeze(0).permute(1, 0)
+        return torch.cat(all_y,dim=1).permute(2,0,1).squeeze(0)
 
     @torch.no_grad()
     def sample_joint(self,s, sample_size=100):
