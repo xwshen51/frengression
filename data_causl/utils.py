@@ -20,6 +20,9 @@ import math
 import os
 import sys
 
+here = os.path.dirname(__file__)
+r_script = os.path.join(here, 'data_causl.R')
+
 from sklearn.preprocessing import MinMaxScaler,MaxAbsScaler,StandardScaler
 from sklearn.model_selection import train_test_split
 from scipy.sparse import diags
@@ -41,7 +44,9 @@ def generate_data_causl(n=10000, nI = 3, nX= 1, nO = 1, nS = 1, ate = 2, beta_co
     pandas2ri.activate()
     # Source the ./data.r script for data.causl dgp function
     with suppress_r_output():
-        robjects.r['source'](r'data_causl/data_causl.R')
+        # get the folder containing utils.py
+    
+        robjects.r['source'](r_script)
         generate_data_causl = robjects.globalenv['data.causl']
         r_dataframe = generate_data_causl(n=n, nI=nI, nX=nX, nO=nO, nS=nS, ate=ate, beta_cov=beta_cov, strength_instr=strength_instr, strength_conf=strength_conf, strength_outcome=strength_outcome, binary_intervention=binary_intervention)
     # Use the localconverter context manager to convert the R dataframe to a Pandas DataFrame
@@ -53,7 +58,7 @@ def generate_data_longitudinl(n=10000, T=10, random_seed=1024, C_coeff=0):
     pandas2ri.activate()
     # Source the ./data.r script for data.causl dgp function
     with suppress_r_output():
-        robjects.r['source'](r'data_causl/data_causl.R')
+        robjects.r['source'](r_script)
         generate_data_longitudinl = robjects.globalenv['data.longitudinl']
         r_dataframe = generate_data_longitudinl(n=n, T=T, random_seed=random_seed, C_coeff=C_coeff)
     # Use the localconverter context manager to convert the R dataframe to a Pandas DataFrame
@@ -96,7 +101,7 @@ def generate_data_survivl(n=10000, T=10, random_seed=1024, C_coeff=0, setting = 
     pandas2ri.activate()
     # Source the ./data.r script for data.causl dgp function
     with suppress_r_output():
-        robjects.r['source'](r'data_causl/data_causl.R')
+        robjects.r['source'](r_script)
         generate_data_survivl = robjects.globalenv['data.survivl']
         r_dataframe = generate_data_survivl(n=n, T=T, random_seed=random_seed, C_coeff=C_coeff, setting = setting)
     # Use the localconverter context manager to convert the R dataframe to a Pandas DataFrame
