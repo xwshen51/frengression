@@ -371,6 +371,7 @@ def Sim_Colangelo_adrf(x):
     return 1.2*x + (x**3)
 
 def Semi_Twins_adrf(x):
-    x_tr,y,z=Semi_Twins_sampler(path = 'data_causl').load_all()
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    x_tr,y,z=Semi_Twins_sampler(path = script_dir).load_all()
     auxiliary_constant = np.mean(y+2 * 1/(1 + np.exp(-3 * x_tr)))
     return -2 * 1/(1 + np.exp(-3 * x)) + auxiliary_constant
