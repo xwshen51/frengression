@@ -325,3 +325,80 @@ def rmse(hat_mu, mu):
 def mape(hat_mu, mu):
     return np.mean(np.abs((hat_mu-mu)/mu))
 
+def gen_data_causl_non_linear(n=10000, 
+    nI=3, 
+    nX=1, 
+    nO=1, 
+    nS=1, 
+    ate=2, 
+    beta_cov=0, 
+    strength_instr=3, 
+    strength_conf=1, 
+    strength_outcome=1
+):
+    """
+    Generate synthetic data using the R script's 'data.causl' function.
+
+    Parameters
+    ----------
+    n : int
+        Number of samples.
+    nI : int
+        Number of instruments.
+    nX : int
+        Number of other covariates (X).
+    nO : int
+        Number of outcome variables?
+    nS : int
+        Other parameter for the underlying DGP (as per R script).
+    ate : float
+        Average treatment effect parameter.
+    beta_cov : float
+        Coefficient for covariates.
+    strength_instr : float
+        Strength of instrument(s).
+    strength_conf : float
+        Strength of confounding.
+    strength_outcome : float
+        Strength of outcome model.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with columns [X1, X2, ..., A, y, propen, mu0, mu1].
+    """
+
+    @contextlib.contextmanager
+    def suppress_r_output():
+        r_output = io.StringIO()
+        with contextlib.redirect_stdout(r_output), contextlib.redirect_stderr(r_output):
+            yield
+
+    pandas2ri.activate()
+
+    # Source the R script to load 'data.causl' function
+    with suppress_r_output():
+        robjects.r['source'](r'../R/data.r')
+        generate_data = robjects.globalenv['data.causl.non_linear']
+
+        # Generate data in R
+        r_dataframe = generate_data(
+            n=n, 
+            nI=nI, 
+            nX=nX, 
+            nO=nO, 
+            nS=nS, 
+            ate=ate, 
+            beta_cov=beta_cov, 
+            strength_instr=strength_instr, 
+            strength_conf=strength_conf, 
+            strength_outcome=strength_outcome
+        )
+        
+
+    # Convert R dataframe to Pandas DataFrame
+    with localconverter(robjects.default_converter + pandas2ri.converter):
+        df = robjects.conversion.rpy2py(r_dataframe)
+
+    return df
+

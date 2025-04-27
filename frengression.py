@@ -7,7 +7,7 @@ sigmoid = torch.nn.Sigmoid()
 
 # cross-fitting
 from sklearn.model_selection import KFold
-def cross_fit_frengression(df, binary_intervention, p, outcome_reg=True, k_folds=5, num_iters=1000, lr=1e-4, sample_size=1000):
+def cross_fit_frengression(df, binary_intervention, p, outcome_reg=True, k_folds=5, num_iters=1000, lr=1e-4, sample_size=1000, tol = 0.01):
     """
     Perform cross-fitting for the Frengression model.
 
@@ -138,7 +138,7 @@ class Frengression(torch.nn.Module):
             if (i == 0) or ((i + 1) % print_every_iter == 0):
                 print(f'Epoch {i + 1}: loss {loss.item():.4f}, loss1 {loss1.item():.4f}, loss2 {loss2.item():.4f}')
     
-    def train_y(self, x, z, y, num_iters=100, lr=1e-3, print_every_iter=10):
+    def train_y(self, x, z, y, num_iters=100, lr=1e-3, print_every_iter=10, tol=0.01):
         self.model_y.train()
         self.model_eta.train()
         self.optimizer_y = torch.optim.Adam(list(self.model_y.parameters()) + list(self.model_eta.parameters()), lr=lr)
@@ -157,6 +157,11 @@ class Frengression(torch.nn.Module):
             eta1 = self.model_eta(xz)
             eta2 = self.model_eta(xz[torch.randperm(x.size(0))])
             loss_eta, loss1_eta, loss2_eta = energy_loss_two_sample(eta_true, eta1, eta2)
+
+            if abs(loss2_y.item() - loss1_y.item()) < tol and \
+                abs(loss2_eta.item() - loss1_eta.item()) < tol:
+                print(f"Stopping at iter {i}: |Δy|={(loss2_y-loss1_y).item():.4e}, |Δη|={(loss2_eta-loss1_eta).item():.4e}")
+                break
             loss = loss_y + loss_eta
             loss.backward()
             self.optimizer_y.step()
