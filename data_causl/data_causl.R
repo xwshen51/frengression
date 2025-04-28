@@ -227,7 +227,7 @@ data.survivl <- function(n=1000, T=10, random_seed = 42,  C_coeff = 0, setting =
                 Y = list(beta=c(0.5,1/5,1/5), phi=1),
                 cop = list(Y=list(Z=list(beta=c(0.5, 0.0))))
                 )
-  }else if(setting == 3){
+  }else if(setting == 4){
     formulas <- list(C ~ 1,
                 Z ~ X_l1 + C,
                 X ~ Z_l0 + C,
@@ -240,7 +240,7 @@ data.survivl <- function(n=1000, T=10, random_seed = 42,  C_coeff = 0, setting =
                 X = list(beta = c(0,1/2,1/10)),
                 Y = list(beta = c(0.15,0.1,C_coeff), phi=1),
                 cop = list(beta=0.8472979))  # gives correlation 0.4
-  }else if(setting == 4){
+  }else if(setting == 3){
   ## Setting 4
     formulas <- list(C ~ 1,
                   Z ~ X_l1 + C,
