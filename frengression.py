@@ -425,7 +425,7 @@ class FrengressionSeq(torch.nn.Module):
             else:
                 yt = self.model_y[t].sample(x[:,:(t+1)*self.x_dim], sample_size = sample_size)
             all_y.append(yt)
-        return all_y
+        return torch.cat(all_y,dim=1)
 
 
 
