@@ -87,11 +87,11 @@ data.causl <- function(n=10000, nI=3, nX=1, nO=1, nS=1, ate=2, beta_cov=0, stren
   parY_names <- c()
 
   if (nX > 0) {
-    parY <- c(parY, rep(list(list(beta = strength_outcome)), nX))
+    parY <- c(parY, rep(list(list(beta = strength_conf)), nX))
     parY_names <- c(parY_names, paste0("X", seq_len(nX)))
   }
   if (nO > 0) {
-    parY <- c(parY, rep(list(list(beta = strength_outcome)), nO))
+    parY <- c(parY, rep(list(list(beta = strength_instr)), nO))
     parY_names <- c(parY_names, paste0("O", seq_len(nO)))
   }
   if (nI > 0) {
@@ -120,6 +120,112 @@ data.causl <- function(n=10000, nI=3, nX=1, nO=1, nS=1, ate=2, beta_cov=0, stren
   # Generate data
   df <- rfrugalParam(n = n, formulas = forms, pars = pars, family = fam)
   p <- nX + nI + nO + nS
+  
+  # Flatten the A column
+  df$A <- as.vector(df$A)
+
+  # Propensity score
+  if (binary_intervention) {
+    if (nI + nX == 1) {
+      df$propen <- plogis(c(rep(strength_instr, nI), rep(strength_conf, nX)) * df[, 1])
+    } else {
+      df$propen <- plogis(rowSums(c(rep(strength_instr, nI), rep(strength_conf, nX)) * df[, c(1:(nI + nX))]))
+    }
+    colnames(df) <- c(paste("X", 1:p, sep = ""), 'A', 'y', 'propen')
+  } else {
+    colnames(df) <- c(paste("X", 1:p, sep = ""), 'A', 'y')
+  }
+  
+  # # Remove nested attributes
+  # attributes(df) <- NULL
+  
+  return(df)
+}
+
+data.causl.RCT <- function(n=10000, nI=3, nX=1,nO=1, nS=1, ate=2, beta_cov=0, strength_instr=3, strength_conf=1, strength_outcome=0.2, binary_intervention=TRUE){
+  
+  forms <- list(list(), A ~ 1, Y ~ A, ~ 1)
+  
+  if(binary_intervention){
+    fam <- list(rep(1, nI  + nO + nS), 5, 1, 1)
+  } else {
+    fam <- list(rep(1, nI + nO + nS), 1, 1, 1)
+  }
+  
+  pars <- list()
+  
+  # Specify the formula and parameters for each covariate type
+  ## Instrumental variables (I)
+  if (nI > 0) {
+    for (i in seq_len(nI)) {
+      forms[[1]] <- c(forms[[1]], as.formula(paste0("I", i, " ~ 1")))
+      pars[paste0("I", i)] <- list(list(beta = beta_cov, phi = 1))
+    }
+  }
+  
+
+  ## Outcome variables (O)
+  if (nO > 0) {
+    for (i in seq_len(nO)) {
+      forms[[1]] <- c(forms[[1]], as.formula(paste0("O", i, " ~ 1")))
+      pars[paste0("O", i)] <- list(list(beta = beta_cov, phi = 1))
+    }
+  }
+  
+  ## Spurious variables (S)
+  if (nS > 0) {
+    for (i in seq_len(nS)) {
+      forms[[1]] <- c(forms[[1]], as.formula(paste0("S", i, " ~ 1")))
+      pars[paste0("S", i)] <- list(list(beta = beta_cov, phi = 1))
+    }
+  }
+  
+  # Specify the formula for A given covariates
+  ## Add I to the propensity score formula
+  if (nI > 0) {
+    for (i in seq_len(nI)) {
+      forms[[2]] <- update.formula(forms[[2]], paste0("A ~ . + I", i))
+    }
+  }
+
+  
+  # Parameters for copula
+  parY <- list()
+  parY_names <- c()
+
+ 
+  if (nO > 0) {
+    parY <- c(parY, rep(list(list(beta = 0)), nO))
+    parY_names <- c(parY_names, paste0("O", seq_len(nO)))
+  }
+  if (nI > 0) {
+    parY <- c(parY, rep(list(list(beta = 0)), nI))
+    parY_names <- c(parY_names, paste0("I", seq_len(nI)))
+  }
+  if (nS > 0) {
+    parY <- c(parY, rep(list(list(beta = 0)), nS))
+    parY_names <- c(parY_names, paste0("S", seq_len(nS)))
+  }
+
+  names(parY) <- parY_names
+  pars$cop <- list(Y = parY)
+
+  
+  # Set parameters for A
+  pars$A$beta <- c(0, rep(strength_instr, nI))
+  if (!binary_intervention) {
+    pars$A$phi <- 1
+  }
+  
+  # Set parameters for Y
+  pars$Y$beta <- c(0, ate)
+  pars$Y$phi <- 1
+
+
+  
+  # Generate data
+  df <- rfrugalParam(n = n, formulas = forms, pars = pars, family = fam)
+  p <- nI + nO + nS
   
   # Flatten the A column
   df$A <- as.vector(df$A)
@@ -377,10 +483,10 @@ data.causl.non_linear <- function(n=1000, nI=1, nX=3, nO=2, nS=1, ate=2, beta_co
   p <- nX + nI + nO + nS
 
   # Propensity score
-  if (nI + nX == 1) {
-    df$propen <- plogis(c(rep(strength_instr, nI), rep(strength_conf, nX)) * df[, 1])
+  if (nI  == 1) {
+    df$propen <- plogis(c(rep(strength_instr, nI)))
   } else {
-    df$propen <- plogis(rowSums(c(rep(strength_instr, nI), rep(strength_conf, nX)) * df[, c(1:(nI + nX))]))
+    df$propen <- plogis(rowSums(c(rep(strength_instr, nI))))
   }
   colnames(df) <- c(paste("X", 1:p, sep = ""), 'A', 'y', 'propen')
   df$A=as.numeric(df$A)

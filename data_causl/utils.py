@@ -54,6 +54,20 @@ def generate_data_causl(n=10000, nI = 3, nX= 1, nO = 1, nS = 1, ate = 2, beta_co
         df = robjects.conversion.rpy2py(r_dataframe)
     return df
 
+def generate_data_causl_RCT(n=10000, nI = 3, nX= 1, nO = 1, nS = 1, ate = 2, beta_cov = 0, strength_instr = 3, strength_conf = 1, strength_outcome = 1, binary_intervention=True):
+    pandas2ri.activate()
+    # Source the ./data.r script for data.causl dgp function
+    with suppress_r_output():
+        # get the folder containing utils.py
+    
+        robjects.r['source'](r_script)
+        generate_data_causl = robjects.globalenv['data.causl.RCT']
+        r_dataframe = generate_data_causl(n=n, nI=nI, nO=nO, nS=nS, ate=ate, beta_cov=beta_cov, strength_instr=strength_instr, strength_conf=strength_conf, strength_outcome=strength_outcome, binary_intervention=binary_intervention)
+    # Use the localconverter context manager to convert the R dataframe to a Pandas DataFrame
+    with localconverter(robjects.default_converter + pandas2ri.converter):
+        df = robjects.conversion.rpy2py(r_dataframe)
+    return df
+
 def generate_data_longitudinl(n=10000, T=10, random_seed=1024, C_coeff=0):
     pandas2ri.activate()
     # Source the ./data.r script for data.causl dgp function
