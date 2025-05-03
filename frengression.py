@@ -1,5 +1,5 @@
 import torch
-from engression.models import StoNet
+from engression.models import StoNet, StoNetBase
 from engression.loss_func import energy_loss_two_sample
 import numpy as np
 import copy
@@ -201,6 +201,11 @@ class Frengression(torch.nn.Module):
     
 
     def specify_causal(self, causal_margin):
+        """_summary_
+
+        Args:
+            causal_margin (SpecifiedCausalMargin): an object of SpecifiedCausalMargin
+        """
         # def causal_margin1(x_eta):
         #     x = x_eta[:, :self.x_dim]
         #     eta = x_eta[:, self.x_dim:]
@@ -793,3 +798,17 @@ class FrengressionSurv(torch.nn.Module):
         
         return event_indicator
         
+
+class SpecifiedCausalMargin(StoNetBase):
+    def __init__(self, ate, x_dim, eta_dist):
+        super().__init__()
+        self.ate = ate  # or self.register_buffer('eta', torch.tensor(eta))
+        self.x_dim = x_dim
+        self.eta_dist = eta_dist
+
+    def forward(self, x):
+        # If 'eta' is truly separate, might need to handle that carefully
+        if self.eta_dist == 'gaussian':
+            eta = torch.randn(x.shape, device=x.device)
+        # other distributions can be implemented likewise
+        return self.ate * x + eta
