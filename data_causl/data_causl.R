@@ -149,7 +149,7 @@ data.longitudinl <- function(n=1000, T=10, random_seed = 42, C_coeff = 0){
   forms <- list(C ~ 1,
                 Z ~ X_l1+Z_l1+C,
                 X ~ Z_l0+C,
-                Y ~ X_l0+C,
+                Y ~ X_l0+X_l1+X_l2+C,
                 ~ 1)
   fams <- list(1, 1, 5, 1, 1) # note outcome is Gaussian
   # fams <- list(1, 1, 1, 1, 1) # note outcome is Gaussian
@@ -157,7 +157,7 @@ data.longitudinl <- function(n=1000, T=10, random_seed = 42, C_coeff = 0){
               Z=list(beta=c(-1/2,1/2,1/2,0.25),phi=0.5),
               # X=list(beta=c(0,0.5,0.25),phi=1),
               X = list(beta = c(0,1/2,1/10), phi=1),
-              Y=list(beta=c(0, 2, C_coeff),phi=1),
+              Y=list(beta=c(0, 2, 1,0.5, C_coeff),phi=1),
               cop=list(beta=0.5))
 
   set.seed(random_seed)
@@ -165,7 +165,6 @@ data.longitudinl <- function(n=1000, T=10, random_seed = 42, C_coeff = 0){
   dat$C=as.numeric(dat$C)
   return(dat)
 }
-
 
 
 data.survivl <- function(n=1000, T=10, random_seed = 42,  C_coeff = 0, setting = 1){
