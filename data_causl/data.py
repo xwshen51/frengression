@@ -9,7 +9,7 @@ import urllib
 import zipfile
 from CausalEGM import *
 #twins https://github.com/AMLab-Amsterdam/CEVAE/blob/master/datasets/TWINS/twin_pairs_Y_3years_samesex.csv
-
+# Some of the codes are adapted from https://github.com/oscarclivio/neuralscorematching/blob/master/codes/datasets.py
 
 # Class reproducing the ACIC 2016 dataset
 class ACIC2016(object):
@@ -97,9 +97,6 @@ class ACIC2016(object):
     def __len__(self):
         return len(self.original_indices)
 
-
-
-
     def _process_covariates(self, covariates):
         covariates_done = {}
         for ind,covariate_name in enumerate(covariates.columns):
@@ -117,6 +114,7 @@ class ACIC2016(object):
                         covariates_done[covariate_name][covariates[covariate_name] == item] = idx
 
         return pd.DataFrame(covariates_done)
+
 
 class News():
 
@@ -312,10 +310,6 @@ def get_trial(
         'y_cfactual': dataset['ycf'][:, trial][idx_included],
         'mu0': dataset['mu0'][:, trial][idx_included],
         'mu1': dataset['mu1'][:, trial][idx_included],
-        # 'ate': dataset['ate'],
-        # 'yadd': dataset['yadd'],
-        # 'ymul': dataset['ymul'],
-        # 'ind_subpop': ind_subpop[idx_included]
     }
 
     return trial_data

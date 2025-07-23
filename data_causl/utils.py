@@ -2,7 +2,13 @@ import numpy as np
 import pandas as pd
 from scipy.special import expit
 import scipy.stats as stats
+import io
+import contextlib
+import warnings
 
+import math
+import os
+import sys
 
 import rpy2.robjects as robjects
 from rpy2.robjects import pandas2ri,numpy2ri
@@ -12,24 +18,15 @@ from rpy2.robjects.packages import importr
 ranger = importr("ranger")
 npcausal = importr('npcausal')
 
-import io
-import contextlib
-import warnings
-
-import math
-import os
-import sys
-
 here = os.path.dirname(__file__)
 r_script = os.path.join(here, 'data_causl.R')
 
 from sklearn.preprocessing import MinMaxScaler,MaxAbsScaler,StandardScaler
-from sklearn.model_selection import train_test_split
-from scipy.sparse import diags
-
-from sklearn.model_selection import KFold
+from sklearn.model_selection import train_test_split, KFold
 from sklearn.linear_model import LogisticRegression, LinearRegression
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
+from scipy.sparse import diags
+
 
 warnings.filterwarnings("ignore", message="R is not initialized by the main thread")
 
@@ -72,7 +69,6 @@ def generate_data_causl_non_linear(n=10000, nI = 3, nX= 1, nO = 1, nS = 1, ate =
     pandas2ri.activate()
     # Source the ./data.r script for data.causl dgp function
     with suppress_r_output():
-        # get the folder containing utils.py
     
         robjects.r['source'](r_script)
         generate_data_causl = robjects.globalenv['data.causl.non_linear']
@@ -114,9 +110,9 @@ def generate_data_longitudinl(n=10000, T=10, random_seed=1024, C_coeff=0):
         if x_col not in df.columns or z_col not in df.columns or y_col not in df.columns:
             raise ValueError(f"Expected columns {x_col}, {z_col}, {y_col} not found in the dataframe.")
 
-        x_list.append(df[x_col].values.reshape(-1, 1))  # Assuming x_dim=1
-        z_list.append(df[z_col].values.reshape(-1, 1))  # Assuming z_dim=1
-        y_list.append(df[y_col].values.reshape(-1, 1))  # Assuming y_dim=1
+        x_list.append(df[x_col].values.reshape(-1, 1))  
+        z_list.append(df[z_col].values.reshape(-1, 1))  
+        y_list.append(df[y_col].values.reshape(-1, 1)) 
 
     # Concatenate along the second dimension to form [n, T * x_dim], etc.
     x_array = np.concatenate(x_list, axis=1)  # Shape: [n, T * x_dim]
@@ -352,5 +348,3 @@ def rmse(hat_mu, mu):
 
 def mape(hat_mu, mu):
     return np.mean(np.abs((hat_mu-mu)/mu))
-
-

@@ -11,17 +11,6 @@ logit <- function(p){
 }
 
 
-# an example of simulating data from causl
-# I, X , O, S stand for instrumental varable, confounder, outcome variable, spurious variable.
-# expectation of potential outcomes and propensity scores are set to be linear
-# strength_instr, strength_conf stand for coefficients in propensity score model for I and X, respectively.
-# strength outcome stand for coefficients in potential outcome model for X and O.
-# Z = (I,X,O,S); Z \overset{i.i.d}{\sim} N(0,1) 
-# A \sim bernoulli(pi(Z)), pi(Z) = logit( \sum_i^{nI} strength_instr_i * I_i + \sum_i^{nX} strength_conf_i * X_i )
-# Y|do(A) \sim N(ate*A,1)
-# copula: gaussian copula, with coefficient to be strength_outcome
-# beta_cov: constant shift. set = 0 for simplification.
-
 data.causl <- function(n=10000, nI=3, nX=1, nO=1, nS=1, ate=2, beta_cov=0, strength_instr=3, strength_conf=1, strength_outcome=0.2, binary_intervention=TRUE){
   
   forms <- list(list(), A ~ 1, Y ~ A, ~ 1)
@@ -143,7 +132,6 @@ data.causl <- function(n=10000, nI=3, nX=1, nO=1, nS=1, ate=2, beta_cov=0, stren
 }
 
 
-
 # an example of simulating data from survivl msm
 data.longitudinl <- function(n=1000, T=10, random_seed = 42, C_coeff = 0){
   forms <- list(C ~ 1,
@@ -152,7 +140,6 @@ data.longitudinl <- function(n=1000, T=10, random_seed = 42, C_coeff = 0){
                 Y ~ X_l0+X_l1+X_l2+C,
                 ~ 1)
   fams <- list(1, 1, 5, 1, 1) # note outcome is Gaussian
-  # fams <- list(1, 1, 1, 1, 1) # note outcome is Gaussian
   pars <- list(C=list(beta=0,phi=1),
               Z=list(beta=c(-1/2,1/2,1/2,0.25),phi=0.5),
               # X=list(beta=c(0,0.5,0.25),phi=1),
@@ -243,8 +230,6 @@ data.causl.non_linear <- function(n=1000, nI=1, nX=3, nO=2, nS=1, ate=2, beta_co
 
   X_terms <- paste0("X",1:nX)
   X_sum <- paste(X_terms, collapse = " + ")
-
-  # Construct the formula string with the new sin() term
   formula_str <- paste0(
     "Y ~ A + I(10*sin(pi*", O_sum, "))",
     " + I(20*(", O_sum, ")^2)",
@@ -255,7 +240,6 @@ data.causl.non_linear <- function(n=1000, nI=1, nX=3, nO=2, nS=1, ate=2, beta_co
   # Convert the string to an R formula
   po_formula <- as.formula(formula_str)
 
-  # forms <- list(list(), A ~ 1, Y ~ A + I(strength_instr*sin(O1))+I(strength_outcome*X1**2), ~ 1)
   forms <- list(list(), A ~ 1, po_formula, ~ 1)
 
   fam <- list(rep(1, nI + nX + nO + nS), 5, 1, 1)
