@@ -8,7 +8,7 @@ Machine learning has revitalized causal inference by combining flexible models a
 Frengression model is stored at ```frengression.py```.  To replicate the experiments in the paper, please check the ```paper_exp``` folder for the jupyter notebooks.
 
 # Requirements
-The R packages, ```causl``` and ```survivl`` need to be installed to run synthetic experiments. You can install the package via:
+The R packages, ```causl``` and ```survivl``` need to be installed to run synthetic experiments. You can install the package via:
 1. Install ```devtools```
    ```
    install.packages("devtools")
