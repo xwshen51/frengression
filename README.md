@@ -1,4 +1,4 @@
-# AMR
+# Frengression
 This repository contains code for our article, [Frugal, Flexible, Faithful: Causal Data Simulation via Frengression](http://arxiv.org/abs/2503.15989).
 
 # Abstract
