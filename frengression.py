@@ -386,6 +386,22 @@ class FrengressionSeq(torch.nn.Module):
             all_y.append(yt)
         return all_y
 
+    @torch.no_grad()
+    def sample_joint(self, s, sample_size=100):
+        self.eval()
+        s = s.to(self.device)
+
+        x_all, z_all = self.sample_xz(s=s)
+
+        eta_all = self.sample_eta(s=s, x=x_all, z=z_all)
+
+        y_all = self.sample_y(s=s, x=x_all, eta=eta_all)
+
+        if self.y_binary:
+            y_all = (y_all > 0.5).int()
+
+        return x_all, z_all, y_all
+
     def reset_y_models(self):
         if self.s_in_predict:
             self.model_y = [
