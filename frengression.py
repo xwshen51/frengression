@@ -386,7 +386,36 @@ class FrengressionSeq(torch.nn.Module):
             all_y.append(yt)
         return all_y
 
+    def reset_y_models(self):
+        if self.s_in_predict:
+            self.model_y = [
+                StoNet(self.s_dim + self.x_dim + self.y_dim, self.y_dim, self.num_layer, self.hidden_dim, self.noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act,verbose=False).to(self.device)
+            ]
+            # generate y1 onwards
+            for t in range(1,self.T):
+                self.model_y.append(
+                    StoNet(self.s_dim + self.x_dim * (t+1)+ self.y_dim, self.y_dim, self.num_layer, self.hidden_dim, self.noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act,verbose=False).to(self.device)
+            )
+        else:
+            self.model_y = [
+                StoNet(self.x_dim + self.y_dim, self.y_dim, self.num_layer, self.hidden_dim, self.noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act,verbose=False).to(self.device)
+            ]
+            # generate y1 onwards
+            for t in range(1,self.T):
+                self.model_y.append(
+                    StoNet(self.x_dim * (t+1)+ self.y_dim, self.y_dim, self.num_layer, self.hidden_dim, self.noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act,verbose=False).to(self.device)
+            )
 
+        # for eta:
+        self.model_eta = [
+            StoNet(self.s_dim + self.x_dim + self.z_dim, self.y_dim, self.num_layer, self.hidden_dim, self.noise_dim, add_bn=False, noise_all_layer=False,verbose=False).to(self.device)
+        ]
+
+        for t in range(1,self.T):
+            self.model_eta.append(
+                StoNet(self.s_dim+(self.x_dim + self.z_dim)*(t + 1), self.y_dim, self.num_layer, self.hidden_dim, self.noise_dim, add_bn=False, noise_all_layer=False, verbose=False).to(self.device)
+            )
+    
 
 class FrengressionSurv(torch.nn.Module):
     def __init__(self, x_dim, y_dim, z_dim, T, s_dim,
@@ -945,3 +974,36 @@ class FrengressionSurv(torch.nn.Module):
         
         return event_indicator
         
+
+    def reset_y_models(self):
+    # for y
+        # generate y0
+        if self.s_in_predict:
+            self.model_y = [
+                StoNet(self.s_dim + self.x_dim + self.y_dim, self.y_dim, self.num_layer, self.hidden_dim, self.noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act,verbose=False).to(self.device)
+            ]
+            # generate y1 onwards
+            for t in range(1,self.T):
+                self.model_y.append(
+                    StoNet(self.s_dim + self.x_dim * (t+1)+ self.y_dim, self.y_dim, self.num_layer, self.hidden_dim, self.noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act,verbose=False).to(self.device)
+                    # StoNet((x_dim+y_dim) * (t+1), y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act).to(device)
+                )
+        else:
+            self.model_y = [
+                StoNet(self.x_dim + self.y_dim, self.y_dim, self.num_layer, self.hidden_dim, self.noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act,verbose=False).to(self.device)
+            ]
+            # generate y1 onwards
+            for t in range(1, self.T):
+                self.model_y.append(
+                    StoNet(self.x_dim * (t+1)+ self.y_dim, self.y_dim, self.num_layer, self.hidden_dim, self.noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act,verbose=False).to(self.device)
+                )
+        
+        # for eta:
+        self.model_eta = [
+            StoNet(self.s_dim + self.x_dim + self.z_dim, self.y_dim, self.num_layer, self.hidden_dim, self.noise_dim, add_bn=False, noise_all_layer=False,verbose=False).to(self.device)
+        ]
+
+        for t in range(1,T):
+            self.model_eta.append(
+                StoNet(self.s_dim+(self.x_dim + self.z_dim)*(t + 1), self.y_dim, self.num_layer, self.hidden_dim, self.noise_dim, add_bn=False, noise_all_layer=False, verbose=False).to(self.device)
+            )
