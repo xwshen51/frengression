@@ -1,5 +1,5 @@
 import torch
-from engression.models import StoNet
+from engression.models import StoNet, StoNetBase
 from engression.loss_func import energy_loss_two_sample
 import numpy as np
 import copy
@@ -30,7 +30,7 @@ class Frengression(torch.nn.Module):
         self.model_y = StoNet(x_dim + y_dim, y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False, out_act=out_act).to(device)
         self.model_eta = StoNet(x_dim + z_dim, y_dim, num_layer, hidden_dim, noise_dim, add_bn=False, noise_all_layer=False).to(device)
         
-    def train_xz(self, x, z, num_iters=100, lr=1e-3, print_every_iter=10):
+    def train_xz(self, x, z, num_iters=100, lr=1e-4, print_every_iter=10):
         self.model_xz.train()
         self.optimizer_xz = torch.optim.Adam(self.model_xz.parameters(), lr=lr)
         xz = torch.cat([x, z], dim=1)
@@ -52,6 +52,7 @@ class Frengression(torch.nn.Module):
                 print(f'Epoch {i + 1}: loss {loss.item():.4f}, loss1 {loss1.item():.4f}, loss2 {loss2.item():.4f}')
     
     def train_y(self, x, z, y, num_iters=100, lr=1e-3, print_every_iter=10, tol=0.01):
+
         self.model_y.train()
         self.model_eta.train()
         self.optimizer_y = torch.optim.Adam(list(self.model_y.parameters()) + list(self.model_eta.parameters()), lr=lr)
@@ -276,6 +277,7 @@ class FrengressionSeq(torch.nn.Module):
         return torch.cat(y_all, dim=1)
 
         
+
     def train_xz(self, s, x, z, num_iters=100, lr=1e-3, print_every_iter=10):
         for model in self.model_xz:
             model.train()
@@ -321,7 +323,7 @@ class FrengressionSeq(torch.nn.Module):
                 print(f'Epoch {i + 1}: loss {loss.item():.4f}, loss1 {loss1.item():.4f}, loss2 {loss2.item():.4f}')
 
     
-    def train_y(self, s, x, z, y, num_iters=100, lr=1e-3, print_every_iter=10):
+    def train_y(self, s, x, z, y, num_iters=100, lr=1e-4, print_every_iter=10):
         all_parameters = []
         for t in range(self.T):
             self.model_y[t].train()
@@ -546,6 +548,7 @@ class FrengressionSurv(torch.nn.Module):
         return torch.cat(x_all, dim=1), torch.cat(z_all, dim=1)
 
         
+
     def train_xz(self, s, x, z, y, num_iters=100, lr=1e-3, print_every_iter=10):
         all_parameters = []
         for t in range(self.T):
@@ -928,6 +931,7 @@ class FrengressionSurv(torch.nn.Module):
                 print(f'Epoch {i + 1}: y_sample_mean {y_sample.float().mean()}')
                 print(f'Epoch {i + 1}: y_sample1_cat.float().mean() {y_sample1_cat.float().mean()}')
 
+
     
     @torch.no_grad()
     def sample_causal_margin(self,s, x, sample_size=100):
@@ -990,7 +994,6 @@ class FrengressionSurv(torch.nn.Module):
         
         return event_indicator
         
-
     def reset_y_models(self):
     # for y
         # generate y0
