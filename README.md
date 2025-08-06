@@ -21,3 +21,5 @@ The R packages, ```causl``` and ```survivl``` need to be installed to run synthe
    install_github("rje42/survivl")
    ```
 Details of the packages can be found in [https://github.com/rje42/causl](https://github.com/rje42/causl) and [https://github.com/rje42/survivl](https://github.com/rje42/survivl).
+
+The python package ```engression''' should be installed. Details can be found in [https://github.com/xwshen51/engression](https://github.com/xwshen51/engression).
