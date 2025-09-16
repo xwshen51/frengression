@@ -1,5 +1,5 @@
 # Frengression
-This repository contains code for our article, [Frugal, Flexible, Faithful: Causal Data Simulation via Frengression](https://arxiv.org/abs/2508.01018).
+This repository contains code to replicate experiments in our article, [Frugal, Flexible, Faithful: Causal Data Simulation via Frengression](https://arxiv.org/abs/2508.01018). For the `Frengression` package, please check [here](https://github.com/linyingyang/frengression_pkg).
 
 # Abstract
 Machine learning has revitalized causal inference by combining flexible models and principled estimators, yet robust benchmarking and evaluation remain challenging with real-world data. In this work, we introduce frengression, a deep generative realization of the frugal parameterization that models the joint distribution of covariates, treatments and outcomes around the causal margin of interest. Frengression provides accurate estimation and flexible, faithful simulation of multivariate, time-varying data; it also enables direct sampling from user-specified interventional distributions. Model consistency and extrapolation guarantees are established, with validation on real-world clinical trial data demonstrating frengression’s practical utility. We envision this framework sparking new research into generative approaches for causal margin modelling.
