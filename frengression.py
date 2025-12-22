@@ -240,7 +240,12 @@ class FrengressionSeq(torch.nn.Module):
         x_all = [x0]
         z_all = [z0]
         for t in range(1,self.T):
-            sxz_p = torch.cat([s, x[:,:(t*self.x_dim)], z[:,:(t*self.z_dim)]], dim=1)
+            if x is not None:
+                sxz_p = torch.cat([s, x[:,:(t*self.x_dim)], z[:,:(t*self.z_dim)]], dim=1)
+            else:
+                # sxz_p = torch.cat([s, x_all[:,:(t*self.x_dim)], z_all[:,:(t*self.z_dim)]], dim=1)
+                sxz_p = torch.cat([s, x_all[t-1], z_all[t-1]], dim=1)
+ 
             xz = self.model_xz[t](sxz_p)
             xt = xz[:, :self.x_dim]
             zt = xz[:, self.x_dim:]
@@ -371,6 +376,8 @@ class FrengressionSeq(torch.nn.Module):
                 yt = self.model_y[t].predict(torch.cat([s,x[:,:(t+1)*self.x_dim]],dim=1), target, sample_size)
             else:
                 yt = self.model_y[t].predict(x[:,:(t+1)*self.x_dim], target, sample_size)
+            if self.y_binary:
+                yt = (yt > 0.5).int()
             all_y.append(yt)
         return all_y
     
@@ -385,7 +392,10 @@ class FrengressionSeq(torch.nn.Module):
                 yt = self.model_y[t].sample(torch.cat([s,x[:,:(t+1)*self.x_dim]], dim=1), sample_size = sample_size)
             else:
                 yt = self.model_y[t].sample(x[:,:(t+1)*self.x_dim], sample_size = sample_size)
+            if self.y_binary:
+                yt = (yt > 0.5).int()
             all_y.append(yt)
+        
         return all_y
 
     @torch.no_grad()
@@ -433,7 +443,7 @@ class FrengressionSeq(torch.nn.Module):
             self.model_eta.append(
                 StoNet(self.s_dim+(self.x_dim + self.z_dim)*(t + 1), self.y_dim, self.num_layer, self.hidden_dim, self.noise_dim, add_bn=False, noise_all_layer=False, verbose=False).to(self.device)
             )
-    
+   
 
 class FrengressionSurv(torch.nn.Module):
     def __init__(self, x_dim, y_dim, z_dim, T, s_dim,
